@@ -17,6 +17,11 @@ import (
 func setupRoutes(app *fiber.App) {
 	video.AllRooms.Init()
 
+	// Health check route
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("✅ Backend is up and running!")
+	})
+
 	// WebSocket middleware
 	app.Use("/join-room", func(c *fiber.Ctx) error {
 		// IsWebSocketUpgrade returns true if the client
@@ -48,7 +53,7 @@ func main() {
 	}
 
 	app := fiber.New(fiber.Config{
-		AppName:           "RiverSide Clone v1.0.1",
+		AppName:           "Seaside Clone v1.0.1",
 		DisableKeepalive:  false,
 		StreamRequestBody: true,
 	})
