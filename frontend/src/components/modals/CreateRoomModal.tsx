@@ -12,6 +12,7 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom
   const [userName, setUserName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const fetchRoomId = async () => {
@@ -48,6 +49,14 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom
     onCreateRoom(roomId, userName, true); // Pass isHost=true
   };
 
+  const handleCopy = async () => {
+    if (roomId) {
+      await navigator.clipboard.writeText(roomId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -75,7 +84,7 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom
             <label htmlFor="roomId" className="block text-sm font-medium text-gray-400 mb-1">
               Room ID
             </label>
-            <div className="flex">
+            <div className="flex items-center">
               <input
                 type="text"
                 id="roomId"
@@ -83,6 +92,15 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom
                 readOnly
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white"
               />
+              <button
+                type="button"
+                onClick={handleCopy}
+                disabled={!roomId}
+                className="ml-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                tabIndex={-1}
+              >
+                {copied ? "Copied!" : "Copy"}
+              </button>
             </div>
             <p className="mt-1 text-xs text-gray-500">This is your unique room identifier</p>
           </div>
