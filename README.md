@@ -2,7 +2,7 @@
 
 A modern podcast platform with cloud support, real-time video chat, and seamless collaboration.
 
-[![Frontend Deploy](https://img.shields.io/badge/Frontend-Live-green?logo=vercel)](https://seasides.vercel.app/) [![Frontend](https://img.shields.io/badge/Live%20Demo-Vercel-0e1117?logo=vercel&logoColor=white)](https://seasides.vercel.app/) [![Frontend Live on Vercel](https://img.shields.io/badge/Frontend-Live-green?logo=vercel)](https://seasides.vercel.app/) [![Frontend on Vercel](https://img.shields.io/badge/Frontend-Live-green?logo=vercel)](https://seasides.vercel.app/)
+[![Frontend Deploy](https://img.shields.io/badge/Frontend-Live-green?logo=vercel)](https://seasides.vercel.app/) | [![Frontend Live on Vercel](https://img.shields.io/badge/Frontend-Live-green?logo=vercel)](https://seasides.vercel.app/) | [![Frontend on Vercel](https://img.shields.io/badge/Frontend-Live-green?logo=vercel)](https://seasides.vercel.app/)
 
 ---
 
