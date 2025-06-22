@@ -47,7 +47,6 @@ func broadcaster() {
 			if err != nil {
 				log.Printf("Broadcast error: %v. Closing connection.", err)
 				client.Conn.Close()
-				// Remove client from room
 				AllRooms.RemoveClient(msg.RoomID, client.Conn)
 			}
 		}
@@ -96,27 +95,23 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 		return
 	}
 
-	// Notify existing participants of a new join
-	for i := 0; i < len(participants); i++ {
-		participant := &participants[i]
-		participant.Mutex.Lock()
-		err := participant.Conn.WriteJSON(map[string]interface{}{
-			"join": true,
-		})
-		participant.Mutex.Unlock()
-		if err != nil {
-			log.Printf("Error sending join message: %v", err)
-		}
-	}
-
 	// Add new participant to the room
 	AllRooms.InsertInRoom(roomID, false, c)
+
+	// Notify ONLY the new participant (polite peer) to start negotiation
+	if len(participants) > 0 {
+		// If there are already participants, this is the polite peer (the joiner)
+		c.WriteJSON(map[string]interface{}{
+			"join": true,
+		})
+	}
 
 	// Start broadcaster once
 	broadcastOnce.Do(func() {
 		go broadcaster()
 	})
 
+	// Listen for messages from this participant
 	for {
 		var msg BroadcastMessage
 		err := c.ReadJSON(&msg.Message)
@@ -133,5 +128,16 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 
 	// Cleanup after connection closes
 	AllRooms.RemoveClient(roomID, c)
+
+	// Notify others that a participant left
+	participants = AllRooms.Get(roomID)
+	for i := 0; i < len(participants); i++ {
+		participant := &participants[i]
+		participant.Mutex.Lock()
+		_ = participant.Conn.WriteJSON(map[string]interface{}{
+			"leave": true,
+		})
+		participant.Mutex.Unlock()
+	}
 	c.Close()
 }
