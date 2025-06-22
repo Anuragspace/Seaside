@@ -1,12 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-/**
- * Robust WebRTC 1-to-1 hook with Perfect Negotiation.
- * - Handles polite/impolite logic
- * - Prevents double answering/offering
- * - Cleans up all resources
- * - Buffers signaling until WebSocket is open
- */
 export function useWebRTC(
     roomId: string,
     userName: string,
@@ -23,6 +16,9 @@ export function useWebRTC(
     const tracksAddedRef = useRef(false);
     const makingOfferRef = useRef(false);
     const ignoreOfferRef = useRef(false);
+    const dataChannelRef = useRef<RTCDataChannel | null>(null);
+    const onMessageRef = useRef<((msg: string) => void) | undefined>();
+    const [dataChannelOpen, setDataChannelOpen] = useState(false);
 
     // Host = impolite, Guest = polite
     const isPolite = !isHost;
@@ -79,7 +75,6 @@ export function useWebRTC(
                 if (!pc) return;
 
                 if (message.offer) {
-                    // Offer collision
                     const offerCollision = makingOfferRef.current || pc.signalingState !== "stable";
                     ignoreOfferRef.current = !isPolite && offerCollision;
                     if (ignoreOfferRef.current) {
@@ -91,23 +86,15 @@ export function useWebRTC(
                             await pc.setLocalDescription({ type: "rollback" });
                         }
                         await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
-                        // ICE queue
+                        // REMOVE addTracksIfNeeded(pc) from here!
                         while (iceQueueRef.current.length > 0) {
                             const candidate = iceQueueRef.current.shift();
                             if (candidate) await pc.addIceCandidate(candidate);
                         }
-                        addTracksIfNeeded(pc);
-                        // Only answer if in have-remote-offer state!
                         if (pc.signalingState === "have-remote-offer") {
                             const answer = await pc.createAnswer();
                             await pc.setLocalDescription(answer);
                             safeWSSend({ answer });
-                        } else {
-                            // This can happen in rare race conditions, just log
-                            console.warn(
-                                "Not in have-remote-offer after setRemoteDescription, not creating answer. State:",
-                                pc.signalingState
-                            );
                         }
                     } catch (err) {
                         console.error("Error handling offer:", err);
@@ -119,9 +106,6 @@ export function useWebRTC(
                         } catch (err) {
                             console.error("Error handling answer:", err);
                         }
-                    } else {
-                        // Silently ignore (or log if you like)
-                        // console.warn("Ignoring remote answer: not in have-local-offer state. Current state:", pc.signalingState);
                     }
                 } else if (message.iceCandidate) {
                     try {
@@ -145,7 +129,8 @@ export function useWebRTC(
             };
 
             peer = createPeer();
-            if (!isPolite) addTracksIfNeeded(peer); // Host only adds tracks, doesn't call
+            addTracksIfNeeded(peer); // <--- Only here, after peer is created, before negotiation
+            // Host does not callUser, guest does in signaling handler
         }
 
         function createPeer() {
@@ -169,6 +154,19 @@ export function useWebRTC(
                     }
                 ]
             });
+
+            if (isHost) {
+                console.log("I am host, creating data channel");
+                const dc = p.createDataChannel("chat");
+                dataChannelRef.current = dc;
+                setupDataChannel(dc);
+            } else {
+                console.log("I am guest, waiting for data channel");
+                p.ondatachannel = (event) => {
+                    dataChannelRef.current = event.channel;
+                    setupDataChannel(event.channel);
+                };
+            }
 
             p.onnegotiationneeded = async () => {
                 try {
@@ -216,6 +214,26 @@ export function useWebRTC(
             return p;
         }
 
+        function setupDataChannel(dc: RTCDataChannel) {
+            dc.onopen = () => {
+                setDataChannelOpen(true);
+                console.log("Data channel open", dc.readyState);
+            };
+            dc.onclose = () => {
+                setDataChannelOpen(false);
+                console.log("Data channel closed");
+            };
+            dc.onerror = (e) => {
+                console.error("Data channel error", e);
+            };
+            dc.onmessage = (event) => {
+                console.log("Data channel message received", event.data);
+                if (typeof event.data === "string" && onMessageRef.current) {
+                    onMessageRef.current(event.data);
+                }
+            };
+        }
+
         function addTracksIfNeeded(peer: RTCPeerConnection) {
             if (!tracksAddedRef.current && localStreamRef.current) {
                 localStreamRef.current.getTracks().forEach((track) => {
@@ -247,5 +265,42 @@ export function useWebRTC(
             wsSendBuffer.current = [];
         };
     // eslint-disable-next-line
-    }, [roomId, userName, micActive, videoActive, localVideoRef, remoteVideoRef, isHost]);
+    }, [roomId, userName, localVideoRef, remoteVideoRef, isHost]);
+
+    // --- Toggle tracks when mic/video state changes ---
+    useEffect(() => {
+        if (!localStreamRef.current) return;
+
+        // Toggle audio tracks
+        localStreamRef.current.getAudioTracks().forEach(track => {
+            track.enabled = micActive;
+        });
+
+        // Toggle video tracks
+        localStreamRef.current.getVideoTracks().forEach(track => {
+            track.enabled = videoActive;
+        });
+    }, [micActive, videoActive]);
+    // --- END OF ADDED EFFECT ---
+
+    // Send chat message over data channel
+    function sendMessage(msg: string) {
+        const dc = dataChannelRef.current;
+        if (dc && dc.readyState === "open") {
+            dc.send(msg);
+        } else {
+            console.warn("Data channel not open, cannot send message");
+        }
+    }
+
+    // Allow component to subscribe to incoming messages
+    function onMessage(cb?: (msg: string) => void) {
+        onMessageRef.current = cb;
+    }
+
+    return {
+        sendMessage,
+        onMessage,
+        dataChannelOpen,
+    };
 }

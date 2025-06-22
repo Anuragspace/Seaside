@@ -56,28 +56,15 @@ func broadcaster() {
 func CreateRoomRequestHandler(c *fiber.Ctx) error {
 	c.Set("Access-Control-Allow-Origin", "*")
 
+	// Prevent duplicate room creation by checking if request is a fetch preflight (OPTIONS)
+	if c.Method() == fiber.MethodOptions {
+		return c.SendStatus(fiber.StatusNoContent)
+	}
+
 	roomID := AllRooms.CreateRoom()
 	log.Printf("Room created: %s", roomID)
 	return c.JSON(response{RoomID: roomID})
 }
-
-func JoinRoomRequestHandler(c *fiber.Ctx) error {
-	roomID := c.Query("roomID")
-	log.Printf("New WebSocket connection for room: %s", roomID)
-	if roomID == "" {
-		log.Println("roomID is missing, unable to join the call")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "roomID is required",
-		})
-	}
-
-	if websocket.IsWebSocketUpgrade(c) {
-		c.Locals("roomID", roomID)
-		return c.Next()
-	}
-	return fiber.ErrUpgradeRequired
-}
-
 func WebSocketJoinHandler(c *websocket.Conn) {
 	roomID := c.Query("roomID")
 	if roomID == "" {
@@ -98,9 +85,8 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 	// Add new participant to the room
 	AllRooms.InsertInRoom(roomID, false, c)
 
-	// Notify ONLY the new participant (polite peer) to start negotiation
+	// Notify ONLY the new participant if there are already others (this is the polite peer)
 	if len(participants) > 0 {
-		// If there are already participants, this is the polite peer (the joiner)
 		c.WriteJSON(map[string]interface{}{
 			"join": true,
 		})

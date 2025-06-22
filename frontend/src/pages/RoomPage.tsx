@@ -3,8 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Mic, MicOff, Video, VideoOff, Phone, Users, MessageSquare, Share2 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useWebRTC } from '../hooks/useWebRTC'; // Import the hook
-
-// Remove the duplicate useWebRTC implementation here
+import ChatBox from '../components/ChatBox'; // Adjust path as needed
 
 // --- Helper for getting query params ---
 function useQuery() {
@@ -19,6 +18,7 @@ const RoomPage: React.FC = () => {
 
   const [micActive, setMicActive] = useState(true);
   const [videoActive, setVideoActive] = useState(true);
+  const [messages, setMessages] = useState<{ text: string; fromMe: boolean; id: number }[]>([]);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -26,7 +26,7 @@ const RoomPage: React.FC = () => {
   // For now, assume the first user is the host if their name is 'You'
   const isHost = userName === 'You';
 
-  useWebRTC(
+  const { sendMessage, onMessage, dataChannelOpen } = useWebRTC(
     roomId!,
     userName,
     localVideoRef,
@@ -47,6 +47,28 @@ const RoomPage: React.FC = () => {
       document.title = 'SeaSide';
     };
   }, [roomId, navigate]);
+
+  // Send chat to peer
+  const handleSend = (msg: string) => {
+    sendMessage(msg); // Send to peer
+    setMessages((prev) => [
+      ...prev,
+      { text: msg, fromMe: true, id: Date.now() },
+    ]);
+  };
+
+  // Listen for incoming messages from peer
+  useEffect(() => {
+    if (!onMessage) return;
+    const handler = (msg: string) => {
+      setMessages((prev) => [
+        ...prev,
+        { text: msg, fromMe: false, id: Date.now() },
+      ]);
+    };
+    onMessage(handler);
+    return () => onMessage(undefined);
+  }, [onMessage]);
 
   return (
     <Layout showNavbar={false}>
@@ -117,6 +139,8 @@ const RoomPage: React.FC = () => {
             <Phone size={24} />
           </button>
         </div>
+
+        <ChatBox onSend={handleSend} messages={messages} dataChannelOpen={dataChannelOpen} />
       </div>
     </Layout>
   );
