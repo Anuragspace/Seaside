@@ -40,6 +40,16 @@ A modern podcast platform with cloud support, real-time video chat, and seamless
 
 ---
 
+## ✨ Usage
+
+1. Visit the [Live Demo](https://seasides.vercel.app/).
+2. Click **Create Room** to start a new podcast session.
+3. Share the room ID with your collaborator.
+4. Collaborator joins using the room ID.
+5. Enjoy real-time video podcasting!
+
+---
+
 ## 🏗️ Technologies Used
 
 | Layer       | Technology                    |
@@ -84,29 +94,6 @@ By default, runs on `http://localhost:5173`.
 
 ---
 
-## 🔑 Environment Variables
-
-### Backend (Render)
-
-- `PORT` (Render sets this automatically)
-- Any other secrets as needed
-
-### Frontend (Vercel)
-
-- `VITE_BACKEND_URL` — URL of the backend (e.g., `https://your-backend.onrender.com`)
-
----
-
-## ✨ Usage
-
-1. Visit the [Live Demo](https://seasides.vercel.app/).
-2. Click **Create Room** to start a new podcast session.
-3. Share the room ID with your collaborator.
-4. Collaborator joins using the room ID.
-5. Enjoy real-time video podcasting!
-
----
-
 ## 📚 Folder Structure
 
 ```
@@ -130,4 +117,4 @@ MIT License
 
 ---
 
-**Made with ❤️ by [Anuragspace](https://github.com/Anuragspace) and [vibhu airan](https://github.com/Vibhuair20).**
+**Made with ❤️ by [Anurag Adarsh](https://github.com/Anuragspace) and [Vibhu Airan](https://github.com/Vibhuair20).**
