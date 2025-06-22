@@ -57,9 +57,12 @@ export function useWebRTC(
 
             // 2. WebSocket signaling
             const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
-            ws = new WebSocket(
-                `${wsProtocol}://${window.location.hostname}:8080/join-room?roomID=${roomId}`
-            );
+            const wsBase =
+              import.meta.env.PROD
+                ? "wss://seaside-backend-pw1v.onrender.com"
+                : `${wsProtocol}://${window.location.hostname}:8080`;
+
+            ws = new WebSocket(`${wsBase}/join-room?roomID=${roomId}`);
             wsRef.current = ws;
 
             ws.onopen = () => {

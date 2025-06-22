@@ -16,7 +16,12 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom
   useEffect(() => {
     const fetchRoomId = async () => {
       try {
-        const response = await fetch('/create-room');
+        const backendBase =
+          import.meta.env.PROD
+            ? 'https://seaside-backend-pw1v.onrender.com'
+            : '';
+
+        const response = await fetch(`${backendBase}/create-room`);
         const data = await response.json();
         setRoomId(data.roomID || '');
       } catch (err) {

@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   // Set base if deploying to a subpath, otherwise omit or set to '/'
-  // base: '/riverside/',
+  // base: '/seaside/',
 
   plugins: [react()],
   optimizeDeps: {
