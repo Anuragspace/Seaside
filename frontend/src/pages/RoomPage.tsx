@@ -139,6 +139,9 @@ const RoomPage: React.FC = () => {
             <Phone size={24} />
           </button>
         </div>
+          {/* Recording button - only audio, with countdown and toggle */}
+          <RecordingAudioButton />
+          <RecordingVideoButton />
 
         <ChatBox onSend={handleSend} messages={messages} dataChannelOpen={dataChannelOpen} />
       </div>
@@ -147,3 +150,121 @@ const RoomPage: React.FC = () => {
 };
 
 export default RoomPage;
+// --- RecordingAudioButton component ---
+const RecordingAudioButton: React.FC = () => {
+  const [recording, setRecording] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (countdown !== null && countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    } else if (countdown === 0) {
+      setCountdown(null);
+      setRecording(true);
+      // Start recording logic here (placeholder)
+      console.log('Audio recording started');
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [countdown]);
+
+  const handleStartRecording = () => {
+    setCountdown(3); // 3 second countdown
+  };
+
+  const handleStopRecording = () => {
+    setRecording(false);
+    // Stop recording logic here (placeholder)
+    console.log('Audio recording stopped');
+  };
+
+  return (
+    <div className="flex space-x-3">
+      {!recording && countdown === null && (
+        <button
+          onClick={handleStartRecording}
+          className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-sm"
+        >
+          Record Audio
+        </button>
+      )}
+      {countdown !== null && (
+        <button
+          disabled
+          className="px-4 py-2 rounded bg-gray-500 text-sm cursor-not-allowed"
+        >
+          Starting in {countdown}...
+        </button>
+      )}
+      {recording && (
+        <button
+          onClick={handleStopRecording}
+          className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-sm"
+        >
+          Stop Recording Audio
+        </button>
+      )}
+    </div>
+  );
+};
+// --- RecordingVideoButton component ---
+const RecordingVideoButton: React.FC = () => {
+  const [recordingVideo, setRecordingVideo] = useState(false);
+  const [countdownVideo, setCountdownVideo] = useState<number | null>(null);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (countdownVideo !== null && countdownVideo > 0) {
+      timer = setTimeout(() => setCountdownVideo(countdownVideo - 1), 1000);
+    } else if (countdownVideo === 0) {
+      setCountdownVideo(null);
+      setRecordingVideo(true);
+      // Start video recording logic here (placeholder)
+      console.log('Video recording started');
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [countdownVideo]);
+
+  const handleStartRecordingVideo = () => {
+    setCountdownVideo(3); // 3 second countdown
+  };
+
+  const handleStopRecordingVideo = () => {
+    setRecordingVideo(false);
+    // Stop video recording logic here (placeholder)
+    console.log('Video recording stopped');
+  };
+
+  return (
+    <div className="flex space-x-3">
+      {!recordingVideo && countdownVideo === null && (
+        <button
+          onClick={handleStartRecordingVideo}
+          className="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-sm"
+        >
+          Record Video
+        </button>
+      )}
+      {countdownVideo !== null && (
+        <button
+          disabled
+          className="px-4 py-2 rounded bg-gray-500 text-sm cursor-not-allowed"
+        >
+          Starting in {countdownVideo}...
+        </button>
+      )}
+      {recordingVideo && (
+        <button
+          onClick={handleStopRecordingVideo}
+          className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-sm"
+        >
+          Stop Recording Video
+        </button>
+      )}
+    </div>
+  );
+};
