@@ -12,7 +12,7 @@ A modern podcast platform with cloud support, real-time video chat, and seamless
 
 ---
 
-## 🌐 Live Demo
+## 🌐 Live Project
 
 - **Frontend:** [https://seasides.vercel.app/](https://seasides.vercel.app/)
 
