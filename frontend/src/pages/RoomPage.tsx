@@ -4,6 +4,7 @@ import { ArrowLeft, Mic, MicOff, Video, VideoOff, Phone, Users, MessageSquare, S
 import Layout from '../components/Layout';
 import { useWebRTC } from '../hooks/useWebRTC'; // Import the hook
 import ChatBox from '../components/ChatBox'; // Adjust path as needed
+import { setupAudio, startRecording, stopRecording } from '../hooks/audioRecord';
 
 // --- Helper for getting query params ---
 function useQuery() {
@@ -156,14 +157,17 @@ const RecordingAudioButton: React.FC = () => {
   const [countdown, setCountdown] = useState<number | null>(null);
 
   useEffect(() => {
+    setupAudio();
+  }, []);
+
+  useEffect(() => {
     let timer: NodeJS.Timeout;
     if (countdown !== null && countdown > 0) {
       timer = setTimeout(() => setCountdown(countdown - 1), 1000);
     } else if (countdown === 0) {
       setCountdown(null);
       setRecording(true);
-      // Start recording logic here (placeholder)
-      console.log('Audio recording started');
+      startRecording();
     }
     return () => {
       if (timer) clearTimeout(timer);
@@ -176,8 +180,16 @@ const RecordingAudioButton: React.FC = () => {
 
   const handleStopRecording = () => {
     setRecording(false);
-    // Stop recording logic here (placeholder)
-    console.log('Audio recording stopped');
+    stopRecording();
+    setTimeout(() => {
+      const playback = document.querySelector('.playback') as HTMLAudioElement | null;
+      if (playback && playback.src) {
+        const a = document.createElement('a');
+        a.href = playback.src;
+        a.download = 'recording.wav';
+        a.click();
+      }
+    }, 500);
   };
 
   return (
