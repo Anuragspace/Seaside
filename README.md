@@ -15,7 +15,7 @@ A modern podcast platform with cloud support, real-time video chat, and seamless
 ## 🌐 Live Project
 
 - **Frontend:** [https://seasides.vercel.app/](https://seasides.vercel.app/)
-- **Backend:** [https://seasides.vercel.app/](https://seaside-backend-pw1v.onrender.com)
+- **Backend:** [https://seaside-backend-pw1v.onrender.com](https://seaside-backend-pw1v.onrender.com)
 ---
 
 ## 🛠️ Tech Stack
