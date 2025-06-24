@@ -141,15 +141,6 @@ export function useWebRTC(
             const p = new RTCPeerConnection({
                 iceServers: [
                     { urls: "stun:stun.l.google.com:19302" },
-                    { urls: "stun:stun1.l.google.com:19302" },
-                    { urls: "stun:stun2.l.google.com:19302" },
-                    { urls: "stun:stun3.l.google.com:19302" },
-                    { urls: "stun:stun4.l.google.com:19302" },
-                    {
-                        urls: "turn:openrelay.metered.ca:80",
-                        username: "openrelayproject",
-                        credential: "openrelayproject"
-                    },
                     {
                         urls: "turn:openrelay.metered.ca:443",
                         username: "openrelayproject",
@@ -159,11 +150,13 @@ export function useWebRTC(
             });
 
             if (isHost) {
+                // Host must create data channel BEFORE negotiation
                 console.log("I am host, creating data channel");
                 const dc = p.createDataChannel("chat");
                 dataChannelRef.current = dc;
                 setupDataChannel(dc);
             } else {
+                // Guest waits for data channel
                 console.log("I am guest, waiting for data channel");
                 p.ondatachannel = (event) => {
                     dataChannelRef.current = event.channel;
@@ -290,6 +283,7 @@ export function useWebRTC(
     function sendMessage(msg: string) {
         const dc = dataChannelRef.current;
         if (dc && dc.readyState === "open") {
+            console.log("Sending message:", msg);
             dc.send(msg);
         } else {
             console.warn("Data channel not open, cannot send message");

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
+import { useNavigate } from "react-router-dom";
 
 interface JoinRoomModalProps {
   onClose: () => void;
-  onJoinRoom: (roomId: string, userName: string) => void;
+  onJoinRoom: (roomId: string, userName: string, isHost: boolean) => void;
 }
 
 const JoinRoomModal: React.FC<JoinRoomModalProps> = ({ onClose, onJoinRoom }) => {
@@ -12,6 +13,7 @@ const JoinRoomModal: React.FC<JoinRoomModalProps> = ({ onClose, onJoinRoom }) =>
   const [userName, setUserName] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Close on escape key
@@ -28,18 +30,19 @@ const JoinRoomModal: React.FC<JoinRoomModalProps> = ({ onClose, onJoinRoom }) =>
   const validateRoomId = (id: string) => /^[a-zA-Z0-9]{6,}$/.test(id);
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (userName.trim() === '') return;
+  e.preventDefault();
+  if (userName.trim() === '') return;
 
-    if (!validateRoomId(roomId)) {
-      setError('Room ID must be at least 6 alphanumeric characters');
-      return;
-    }
+  if (!validateRoomId(roomId)) {
+    setError('Room ID must be at least 6 alphanumeric characters');
+    return;
+  }
 
-    setIsJoining(true);
-    setError('');
-    onJoinRoom(roomId, userName);
-  };
+  setIsJoining(true);
+  setError('');
+  // Navigate as guest
+  navigate(`/room/${roomId}?user=${userName}`, { state: { isHost: false } });
+};
 
   const handlePaste = async () => {
     const text = await navigator.clipboard.readText();

@@ -13,7 +13,7 @@ let isRecording = false;
 
 // Setup camera and microphone access
 export async function setupVideo() {
-    try {
+    try {cd 
         videoStream = await navigator.mediaDevices.getUserMedia({
             video: {
                 width: { ideal: 1920 },

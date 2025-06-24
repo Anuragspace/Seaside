@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import CreateRoomModal from './modals/CreateRoomModal';
 import JoinRoomModal from './modals/JoinRoomModal';
+import Notification from "../components/notification";
 
 const Hero: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -19,7 +20,7 @@ const Hero: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-full flex flex-col items-center justify-center px-4">
+    <div className="pt-32 w-full flex flex-col items-center justify-center px-4 mt-0">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -64,7 +65,9 @@ const Hero: React.FC = () => {
           onJoinRoom={handleJoinRoom}
         />
       )}
+      <Notification />
     </div>
+    
   );
 };
 

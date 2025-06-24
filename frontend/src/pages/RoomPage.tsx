@@ -162,7 +162,7 @@ const RecordingAudioButton: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: number;
     if (countdown !== null && countdown > 0) {
       timer = setTimeout(() => setCountdown(countdown - 1), 1000);
     } else if (countdown === 0) {
@@ -227,7 +227,7 @@ const RecordingVideoButton: React.FC = () => {
   const [recordingVideo, setRecordingVideo] = useState(false);
   const [countdownVideo, setCountdownVideo] = useState<number | null>(null);
   const [timer, setTimer] = useState('00:00');
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<number | null>(null);
   const secondsRef = useRef(0);
 
   useEffect(() => {
@@ -235,7 +235,7 @@ const RecordingVideoButton: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: number;
     if (countdownVideo !== null && countdownVideo > 0) {
       interval = setTimeout(() => setCountdownVideo(countdownVideo - 1), 1000);
     } else if (countdownVideo === 0) {

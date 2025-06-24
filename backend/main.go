@@ -19,7 +19,7 @@ func setupRoutes(app *fiber.App) {
 
 	// Health check route
 	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("✅ Backend is up and running!")
+		return c.SendString("✅ Backend is up and running! Go back to https://seasides.vercel.app/ and Creare Room ID")
 	})
 
 	// WebSocket middleware
