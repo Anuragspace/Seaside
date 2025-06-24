@@ -5,6 +5,7 @@ import Layout from '../components/Layout';
 import { useWebRTC } from '../hooks/useWebRTC'; // Import the hook
 import ChatBox from '../components/ChatBox'; // Adjust path as needed
 import { setupAudio, startRecording, stopRecording } from '../hooks/audioRecord';
+import { setupVideo, startVideoRecording, stopVideoRecording,  } from '../hooks/videoRecord';
 
 // --- Helper for getting query params ---
 function useQuery() {
@@ -225,19 +226,32 @@ const RecordingAudioButton: React.FC = () => {
 const RecordingVideoButton: React.FC = () => {
   const [recordingVideo, setRecordingVideo] = useState(false);
   const [countdownVideo, setCountdownVideo] = useState<number | null>(null);
+  const [timer, setTimer] = useState('00:00');
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const secondsRef = useRef(0);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    setupVideo();
+  }, []);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
     if (countdownVideo !== null && countdownVideo > 0) {
-      timer = setTimeout(() => setCountdownVideo(countdownVideo - 1), 1000);
+      interval = setTimeout(() => setCountdownVideo(countdownVideo - 1), 1000);
     } else if (countdownVideo === 0) {
       setCountdownVideo(null);
       setRecordingVideo(true);
-      // Start video recording logic here (placeholder)
-      console.log('Video recording started');
+      secondsRef.current = 0;
+      timerRef.current = setInterval(() => {
+        secondsRef.current += 1;
+        const min = String(Math.floor(secondsRef.current / 60)).padStart(2, '0');
+        const sec = String(secondsRef.current % 60).padStart(2, '0');
+        setTimer(`${min}:${sec}`);
+      }, 1000);
+      startVideoRecording();
     }
     return () => {
-      if (timer) clearTimeout(timer);
+      if (interval) clearTimeout(interval);
     };
   }, [countdownVideo]);
 
@@ -247,12 +261,16 @@ const RecordingVideoButton: React.FC = () => {
 
   const handleStopRecordingVideo = () => {
     setRecordingVideo(false);
-    // Stop video recording logic here (placeholder)
-    console.log('Video recording stopped');
+    stopVideoRecording();
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setTimer('00:00');
   };
 
   return (
-    <div className="flex space-x-3">
+    <div className="flex space-x-3 items-center">
       {!recordingVideo && countdownVideo === null && (
         <button
           onClick={handleStartRecordingVideo}
@@ -270,12 +288,17 @@ const RecordingVideoButton: React.FC = () => {
         </button>
       )}
       {recordingVideo && (
-        <button
-          onClick={handleStopRecordingVideo}
-          className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-sm"
-        >
-          Stop Recording Video
-        </button>
+        <>
+          <button
+            onClick={handleStopRecordingVideo}
+            className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-sm"
+          >
+            Stop Recording Video
+          </button>
+          <div className="video-timer absolute top-2 left-2 text-white text-sm bg-black/60 px-2 py-1 rounded">
+            {timer}
+          </div>
+        </>
       )}
     </div>
   );
