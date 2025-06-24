@@ -15,7 +15,7 @@ A modern podcast platform with cloud support, real-time video chat, and seamless
 ## 🌐 Live Project
 
 - **Frontend:** [https://seasides.vercel.app/](https://seasides.vercel.app/)
-
+- **Backend:** [https://seasides.vercel.app/](https://seaside-backend-pw1v.onrender.com)
 ---
 
 ## 🛠️ Tech Stack
@@ -117,4 +117,4 @@ MIT License
 
 ---
 
-**Made with ❤️ by [Anurag Adarsh](https://github.com/Anuragspace) and [Vibhu Airan](https://github.com/Vibhuair20).**
+**Made with ❤️ by [Vibhu Airan](https://github.com/Vibhuair20) and [Anurag Adarsh](https://github.com/Anuragspace).**
