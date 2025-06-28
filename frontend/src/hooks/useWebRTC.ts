@@ -25,9 +25,9 @@ export function useWebRTC(
     const ignoreOfferRef = useRef(false);
     const dataChannelRef = useRef<RTCDataChannel | null>(null);
     const onMessageRef = useRef<((msg: string) => void) | undefined>();
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
-    const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectTimeoutRef = useRef<number | null>(null);
+    const heartbeatIntervalRef = useRef<number | null>(null);
+    const statsIntervalRef = useRef<number | null>(null);
     
     const [dataChannelOpen, setDataChannelOpen] = useState(false);
     const [connectionState, setConnectionState] = useState<RTCPeerConnectionState>('new');
@@ -84,7 +84,7 @@ export function useWebRTC(
             console.error("[DataChannel] Error:", error);
             setDataChannelOpen(false);
         };
-
+        
         dc.onmessage = (event) => {
             console.log("[DataChannel] Message received:", event.data);
             if (typeof event.data === "string" && onMessageRef.current) {

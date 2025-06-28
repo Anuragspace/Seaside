@@ -77,10 +77,7 @@ func setupRoutes(app *fiber.App) {
 		Origins:         []string{"*"},
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		CheckOrigin: func(c *fiber.Ctx) bool {
-			// In production, implement proper origin checking
-			return true
-		},
+		
 		EnableCompression: true,
 	}))
 }
