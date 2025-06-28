@@ -27,7 +27,7 @@ type Client struct {
 }
 
 var (
-	broadcast     = make(chan BroadcastMessage)
+	broadcast     = make(chan BroadcastMessage, 100) // Buffered channel
 	broadcastOnce sync.Once
 )
 
@@ -46,7 +46,7 @@ func broadcaster() {
 			client.Mutex.Unlock()
 
 			if err != nil {
-				log.Printf("Broadcast error: %v. Closing connection.", err)
+				log.Printf("Broadcast error for room %s: %v. Closing connection.", msg.RoomID, err)
 				client.Conn.Close()
 				AllRooms.RemoveClient(msg.RoomID, client.Conn)
 			}
@@ -77,32 +77,41 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 
 	log.Printf("New WebSocket connection for room: %s", roomID)
 
+	// Check if room exists, if not create it
 	participants := AllRooms.Get(roomID)
 	if participants == nil {
-		log.Printf("Room %s does not exist", roomID)
-		c.Close()
-		return
+		log.Printf("Room %s does not exist, creating it", roomID)
+		// Room doesn't exist, but we'll create it implicitly
+		AllRooms.Map[roomID] = []Participant{}
 	}
 
 	// Add new participant to the room
 	AllRooms.InsertInRoom(roomID, false, c)
 
-	// Notify ONLY the new participant if there are already others (this is the polite peer)
-	if len(participants) > 0 {
-		c.WriteJSON(map[string]interface{}{
+	// Get updated participants list
+	participants = AllRooms.Get(roomID)
+	
+	// Notify the new participant if there are already others
+	if len(participants) > 1 {
+		log.Printf("Notifying new participant in room %s that others are present", roomID)
+		err := c.WriteJSON(map[string]interface{}{
 			"join": true,
 		})
+		if err != nil {
+			log.Printf("Error notifying new participant: %v", err)
+		}
 	}
-
-	// Start broadcaster once
-	broadcastOnce.Do(func() {
-		go broadcaster()
-	})
 
 	// Set up ping/pong for connection health monitoring
 	c.SetPongHandler(func(string) error {
 		log.Printf("Received pong from room %s", roomID)
+		AllRooms.UpdateLastPing(roomID, c)
 		return nil
+	})
+
+	// Start broadcaster once
+	broadcastOnce.Do(func() {
+		go broadcaster()
 	})
 
 	// Start heartbeat for this connection
@@ -110,16 +119,25 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 	defer heartbeatTicker.Stop()
 
 	// Channel to signal when to stop heartbeat
-	done := make(chan bool)
+	done := make(chan bool, 1)
 
 	// Heartbeat goroutine
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Heartbeat goroutine panic for room %s: %v", roomID, r)
+			}
+		}()
+		
 		for {
 			select {
 			case <-heartbeatTicker.C:
 				if err := c.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 					log.Printf("Heartbeat failed for room %s: %v", roomID, err)
-					done <- true
+					select {
+					case done <- true:
+					default:
+					}
 					return
 				}
 			case <-done:
@@ -140,16 +158,32 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 		// Handle ping messages from client
 		if msgType, ok := msg.Message["type"].(string); ok && msgType == "ping" {
 			// Send pong response
-			c.WriteJSON(map[string]interface{}{
+			err := c.WriteJSON(map[string]interface{}{
 				"type": "pong",
 			})
+			if err != nil {
+				log.Printf("Error sending pong to room %s: %v", roomID, err)
+			}
+			AllRooms.UpdateLastPing(roomID, c)
 			continue
 		}
 
 		msg.Client = c
 		msg.RoomID = roomID
 
-		// Add message validation and rate limiting here if needed
+		// Log the message type for debugging
+		if offer, hasOffer := msg.Message["offer"]; hasOffer {
+			log.Printf("Broadcasting offer in room %s", roomID)
+			_ = offer // Avoid unused variable warning
+		} else if answer, hasAnswer := msg.Message["answer"]; hasAnswer {
+			log.Printf("Broadcasting answer in room %s", roomID)
+			_ = answer // Avoid unused variable warning
+		} else if candidate, hasCandidate := msg.Message["iceCandidate"]; hasCandidate {
+			log.Printf("Broadcasting ICE candidate in room %s", roomID)
+			_ = candidate // Avoid unused variable warning
+		}
+
+		// Broadcast message with timeout to prevent blocking
 		select {
 		case broadcast <- msg:
 		case <-time.After(5 * time.Second):
@@ -158,9 +192,13 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 	}
 
 	// Signal heartbeat to stop
-	done <- true
+	select {
+	case done <- true:
+	default:
+	}
 
 	// Cleanup after connection closes
+	log.Printf("Cleaning up connection for room %s", roomID)
 	AllRooms.RemoveClient(roomID, c)
 
 	// Notify others that a participant left
@@ -168,10 +206,14 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 	for i := 0; i < len(participants); i++ {
 		participant := &participants[i]
 		participant.Mutex.Lock()
-		_ = participant.Conn.WriteJSON(map[string]interface{}{
+		err := participant.Conn.WriteJSON(map[string]interface{}{
 			"leave": true,
 		})
 		participant.Mutex.Unlock()
+		if err != nil {
+			log.Printf("Error notifying participant of leave in room %s: %v", roomID, err)
+		}
 	}
+	
 	c.Close()
 }

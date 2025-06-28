@@ -66,6 +66,163 @@ export function useWebRTC(
         }
     }, []);
 
+    // Enhanced data channel setup with proper error handling
+    const setupDataChannel = useCallback((dc: RTCDataChannel) => {
+        console.log("[DataChannel] Setting up data channel:", dc.label);
+        
+        dc.onopen = () => {
+            console.log("[DataChannel] Opened successfully");
+            setDataChannelOpen(true);
+        };
+
+        dc.onclose = () => {
+            console.log("[DataChannel] Closed");
+            setDataChannelOpen(false);
+        };
+
+        dc.onerror = (error) => {
+            console.error("[DataChannel] Error:", error);
+            setDataChannelOpen(false);
+        };
+
+        dc.onmessage = (event) => {
+            console.log("[DataChannel] Message received:", event.data);
+            if (typeof event.data === "string" && onMessageRef.current) {
+                try {
+                    onMessageRef.current(event.data);
+                } catch (error) {
+                    console.error("[DataChannel] Error processing message:", error);
+                }
+            }
+        };
+
+        // Monitor data channel state
+        const checkState = () => {
+            console.log("[DataChannel] State:", dc.readyState);
+            if (dc.readyState === 'open') {
+                setDataChannelOpen(true);
+            } else {
+                setDataChannelOpen(false);
+            }
+        };
+
+        // Check state periodically until open
+        const stateInterval = setInterval(() => {
+            checkState();
+            if (dc.readyState === 'open' || dc.readyState === 'closed') {
+                clearInterval(stateInterval);
+            }
+        }, 100);
+
+        return dc;
+    }, []);
+
+    // Enhanced peer connection creation
+    const createPeer = useCallback(() => {
+        if (peerRef.current) {
+            console.log("[WebRTC] Peer connection already exists");
+            return peerRef.current;
+        }
+
+        console.log("[WebRTC] Creating new peer connection");
+        const pc = new RTCPeerConnection({
+            iceServers,
+            iceCandidatePoolSize: 10,
+            bundlePolicy: 'max-bundle',
+            rtcpMuxPolicy: 'require'
+        });
+
+        // Enhanced connection state monitoring
+        pc.onconnectionstatechange = () => {
+            const state = pc.connectionState;
+            setConnectionState(state);
+            console.log("[WebRTC] Connection state:", state);
+
+            if (state === 'failed' || state === 'disconnected') {
+                handleConnectionFailure();
+            } else if (state === 'connected') {
+                setIsReconnecting(false);
+                startStatsMonitoring();
+                console.log("[WebRTC] Connection established successfully");
+            }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+            const state = pc.iceConnectionState;
+            setIceConnectionState(state);
+            console.log("[WebRTC] ICE connection state:", state);
+
+            if (state === 'failed' || state === 'disconnected') {
+                handleConnectionFailure();
+            } else if (state === 'connected') {
+                console.log("[WebRTC] ICE connection established");
+            }
+        };
+
+        // Data channel setup - CRITICAL FIX
+        if (isHost) {
+            console.log("[WebRTC] Host creating data channel");
+            // Create data channel AFTER peer connection is created but BEFORE adding tracks
+            const dc = pc.createDataChannel("chat", {
+                ordered: true,
+                maxRetransmits: 3,
+                maxPacketLifeTime: 3000
+            });
+            dataChannelRef.current = setupDataChannel(dc);
+        } else {
+            console.log("[WebRTC] Guest waiting for data channel");
+            pc.ondatachannel = (event) => {
+                console.log("[WebRTC] Guest received data channel");
+                dataChannelRef.current = setupDataChannel(event.channel);
+            };
+        }
+
+        // Enhanced negotiation handling
+        pc.onnegotiationneeded = async () => {
+            try {
+                console.log("[WebRTC] Negotiation needed");
+                makingOfferRef.current = true;
+                
+                if (pc.signalingState === "stable") {
+                    const offer = await pc.createOffer({
+                        offerToReceiveAudio: true,
+                        offerToReceiveVideo: true
+                    });
+                    await pc.setLocalDescription(offer);
+                    console.log("[WebRTC] Sending offer");
+                    safeWSSend({ offer });
+                }
+            } catch (error) {
+                console.error("[WebRTC] Negotiation error:", error);
+            } finally {
+                makingOfferRef.current = false;
+            }
+        };
+
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                console.log("[WebRTC] Sending ICE candidate");
+                safeWSSend({ iceCandidate: event.candidate });
+            } else {
+                console.log("[WebRTC] ICE gathering complete");
+            }
+        };
+
+        pc.ontrack = (event) => {
+            console.log("[WebRTC] Remote track received");
+            const remoteStream = new MediaStream();
+            event.streams[0].getTracks().forEach((track) => {
+                remoteStream.addTrack(track);
+            });
+            if (remoteVideoRef.current) {
+                remoteVideoRef.current.srcObject = remoteStream;
+            }
+        };
+
+        peerRef.current = pc;
+        return pc;
+    }, [isHost, safeWSSend, remoteVideoRef, setupDataChannel]);
+
     // Enhanced WebSocket connection with retry logic
     const connectWebSocket = useCallback(() => {
         if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -116,6 +273,79 @@ export function useWebRTC(
         };
     }, [roomId, userName, isReconnecting]);
 
+    // Enhanced signaling message handler
+    const handleSignalingMessage = useCallback(async (message: any) => {
+        const pc = peerRef.current;
+        if (!pc) {
+            console.warn("[WebRTC] No peer connection available for message:", message);
+            return;
+        }
+
+        try {
+            if (message.type === 'pong') {
+                // Heartbeat response
+                return;
+            }
+
+            if (message.offer) {
+                console.log("[WebRTC] Received offer");
+                const offerCollision = makingOfferRef.current || pc.signalingState !== "stable";
+                ignoreOfferRef.current = !isPolite && offerCollision;
+                
+                if (ignoreOfferRef.current) {
+                    console.log("[WebRTC] Ignoring offer due to collision (impolite peer)");
+                    return;
+                }
+
+                if (offerCollision) {
+                    console.log("[WebRTC] Offer collision, rolling back");
+                    await pc.setLocalDescription({ type: "rollback" });
+                }
+
+                await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
+                console.log("[WebRTC] Remote description set");
+                
+                // Process queued ICE candidates
+                while (iceQueueRef.current.length > 0) {
+                    const candidate = iceQueueRef.current.shift();
+                    if (candidate) {
+                        await pc.addIceCandidate(candidate);
+                    }
+                }
+
+                if (pc.signalingState === "have-remote-offer") {
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    console.log("[WebRTC] Sending answer");
+                    safeWSSend({ answer });
+                }
+            } else if (message.answer) {
+                console.log("[WebRTC] Received answer");
+                if (pc.signalingState === "have-local-offer") {
+                    await pc.setRemoteDescription(new RTCSessionDescription(message.answer));
+                    console.log("[WebRTC] Answer processed");
+                }
+            } else if (message.iceCandidate) {
+                console.log("[WebRTC] Received ICE candidate");
+                if (pc.remoteDescription && pc.remoteDescription.type) {
+                    await pc.addIceCandidate(new RTCIceCandidate(message.iceCandidate));
+                } else {
+                    console.log("[WebRTC] Queueing ICE candidate");
+                    iceQueueRef.current.push(message.iceCandidate);
+                }
+            } else if (message.join && isPolite) {
+                console.log("[WebRTC] Join message received, initiating call");
+                // Only polite (guest) peer initiates
+                await callUser();
+            } else if (message.leave) {
+                console.log("[WebRTC] Peer left");
+                handlePeerDisconnection();
+            }
+        } catch (error) {
+            console.error("[WebRTC] Error handling signaling message:", error);
+        }
+    }, [isPolite, safeWSSend]);
+
     // Heartbeat mechanism to detect connection issues
     const startHeartbeat = useCallback(() => {
         stopHeartbeat();
@@ -146,162 +376,11 @@ export function useWebRTC(
         }, delay);
     }, [connectWebSocket, isReconnecting]);
 
-    // Enhanced signaling message handler
-    const handleSignalingMessage = useCallback(async (message: any) => {
-        const pc = peerRef.current;
-        if (!pc) return;
-
-        try {
-            if (message.type === 'pong') {
-                // Heartbeat response
-                return;
-            }
-
-            if (message.offer) {
-                const offerCollision = makingOfferRef.current || pc.signalingState !== "stable";
-                ignoreOfferRef.current = !isPolite && offerCollision;
-                
-                if (ignoreOfferRef.current) {
-                    console.log("[WebRTC] Ignoring offer due to collision (impolite peer)");
-                    return;
-                }
-
-                if (offerCollision) {
-                    await pc.setLocalDescription({ type: "rollback" });
-                }
-
-                await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
-                
-                // Process queued ICE candidates
-                while (iceQueueRef.current.length > 0) {
-                    const candidate = iceQueueRef.current.shift();
-                    if (candidate) {
-                        await pc.addIceCandidate(candidate);
-                    }
-                }
-
-                if (pc.signalingState === "have-remote-offer") {
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
-                    safeWSSend({ answer });
-                }
-            } else if (message.answer) {
-                if (pc.signalingState === "have-local-offer") {
-                    await pc.setRemoteDescription(new RTCSessionDescription(message.answer));
-                }
-            } else if (message.iceCandidate) {
-                if (pc.remoteDescription && pc.remoteDescription.type) {
-                    await pc.addIceCandidate(new RTCIceCandidate(message.iceCandidate));
-                } else {
-                    iceQueueRef.current.push(message.iceCandidate);
-                }
-            } else if (message.join && isPolite) {
-                // Only polite (guest) peer initiates
-                await callUser();
-            } else if (message.leave) {
-                handlePeerDisconnection();
-            }
-        } catch (error) {
-            console.error("[WebRTC] Error handling signaling message:", error);
-        }
-    }, [isPolite, safeWSSend]);
-
-    // Enhanced peer connection creation
-    const createPeer = useCallback(() => {
-        if (peerRef.current) return peerRef.current;
-
-        const pc = new RTCPeerConnection({
-            iceServers,
-            iceCandidatePoolSize: 10,
-            bundlePolicy: 'max-bundle',
-            rtcpMuxPolicy: 'require'
-        });
-
-        // Enhanced connection state monitoring
-        pc.onconnectionstatechange = () => {
-            const state = pc.connectionState;
-            setConnectionState(state);
-            console.log("[WebRTC] Connection state:", state);
-
-            if (state === 'failed' || state === 'disconnected') {
-                handleConnectionFailure();
-            } else if (state === 'connected') {
-                setIsReconnecting(false);
-                startStatsMonitoring();
-            }
-        };
-
-        pc.oniceconnectionstatechange = () => {
-            const state = pc.iceConnectionState;
-            setIceConnectionState(state);
-            console.log("[WebRTC] ICE connection state:", state);
-
-            if (state === 'failed' || state === 'disconnected') {
-                handleConnectionFailure();
-            }
-        };
-
-        // Data channel setup
-        if (isHost) {
-            console.log("[WebRTC] Host creating data channel");
-            const dc = pc.createDataChannel("chat", {
-                ordered: true,
-                maxRetransmits: 3
-            });
-            dataChannelRef.current = dc;
-            setupDataChannel(dc);
-        } else {
-            console.log("[WebRTC] Guest waiting for data channel");
-            pc.ondatachannel = (event) => {
-                dataChannelRef.current = event.channel;
-                setupDataChannel(event.channel);
-            };
-        }
-
-        // Enhanced negotiation handling
-        pc.onnegotiationneeded = async () => {
-            try {
-                makingOfferRef.current = true;
-                if (pc.signalingState === "stable") {
-                    const offer = await pc.createOffer({
-                        offerToReceiveAudio: true,
-                        offerToReceiveVideo: true
-                    });
-                    await pc.setLocalDescription(offer);
-                    safeWSSend({ offer });
-                }
-            } catch (error) {
-                console.error("[WebRTC] Negotiation error:", error);
-            } finally {
-                makingOfferRef.current = false;
-            }
-        };
-
-        pc.onicecandidate = (event) => {
-            if (event.candidate) {
-                safeWSSend({ iceCandidate: event.candidate });
-            }
-        };
-
-        pc.ontrack = (event) => {
-            console.log("[WebRTC] Remote track received");
-            const remoteStream = new MediaStream();
-            event.streams[0].getTracks().forEach((track) => {
-                remoteStream.addTrack(track);
-            });
-            if (remoteVideoRef.current) {
-                remoteVideoRef.current.srcObject = remoteStream;
-            }
-        };
-
-        peerRef.current = pc;
-        return pc;
-    }, [isHost, safeWSSend, remoteVideoRef]);
-
     // Connection failure handler with restart capability
     const handleConnectionFailure = useCallback(async () => {
         console.log("[WebRTC] Connection failure detected, attempting restart");
         setIsReconnecting(true);
+        setDataChannelOpen(false);
 
         // Close existing connection
         if (peerRef.current) {
@@ -312,6 +391,7 @@ export function useWebRTC(
         // Reset state
         tracksAddedRef.current = false;
         iceQueueRef.current = [];
+        dataChannelRef.current = null;
 
         // Restart connection after delay
         setTimeout(async () => {
@@ -336,42 +416,21 @@ export function useWebRTC(
         setDataChannelOpen(false);
     }, [remoteVideoRef]);
 
-    // Enhanced data channel setup
-    const setupDataChannel = useCallback((dc: RTCDataChannel) => {
-        dc.onopen = () => {
-            setDataChannelOpen(true);
-            console.log("[DataChannel] Opened");
-        };
-
-        dc.onclose = () => {
-            setDataChannelOpen(false);
-            console.log("[DataChannel] Closed");
-        };
-
-        dc.onerror = (error) => {
-            console.error("[DataChannel] Error:", error);
-        };
-
-        dc.onmessage = (event) => {
-            if (typeof event.data === "string" && onMessageRef.current) {
-                onMessageRef.current(event.data);
-            }
-        };
-    }, []);
-
     // Enhanced track management
     const addTracksIfNeeded = useCallback(async (peer: RTCPeerConnection) => {
         if (!tracksAddedRef.current && localStreamRef.current) {
+            console.log("[WebRTC] Adding local tracks");
             localStreamRef.current.getTracks().forEach((track) => {
                 peer.addTrack(track, localStreamRef.current!);
             });
             tracksAddedRef.current = true;
-            console.log("[WebRTC] Local tracks added");
+            console.log("[WebRTC] Local tracks added successfully");
         }
     }, []);
 
     // Call initiation
     const callUser = useCallback(async () => {
+        console.log("[WebRTC] Initiating call");
         const peer = createPeer();
         await addTracksIfNeeded(peer);
     }, [createPeer, addTracksIfNeeded]);
@@ -429,6 +488,8 @@ export function useWebRTC(
 
         async function start() {
             try {
+                console.log("[Setup] Starting WebRTC setup");
+                
                 // Get local media with enhanced constraints
                 localStream = await navigator.mediaDevices.getUserMedia({
                     video: videoActive ? {
@@ -448,13 +509,16 @@ export function useWebRTC(
                     localVideoRef.current.srcObject = localStream;
                 }
                 localStreamRef.current = localStream;
+                console.log("[Setup] Local media acquired");
 
-                // Connect WebSocket
-                connectWebSocket();
-
-                // Create peer connection
+                // Create peer connection first
                 const peer = createPeer();
+                
+                // Add tracks to peer connection
                 await addTracksIfNeeded(peer);
+                
+                // Connect WebSocket after peer is ready
+                connectWebSocket();
 
             } catch (error) {
                 console.error("[Setup] Error:", error);
@@ -465,6 +529,8 @@ export function useWebRTC(
         start();
 
         return () => {
+            console.log("[Cleanup] Cleaning up WebRTC resources");
+            
             // Cleanup
             stopHeartbeat();
             stopStatsMonitoring();
@@ -481,11 +547,18 @@ export function useWebRTC(
             peerRef.current = null;
             wsRef.current = null;
             localStreamRef.current = null;
+            dataChannelRef.current = null;
             tracksAddedRef.current = false;
             iceQueueRef.current = [];
             makingOfferRef.current = false;
             ignoreOfferRef.current = false;
             wsSendBuffer.current = [];
+            
+            // Reset state
+            setDataChannelOpen(false);
+            setConnectionState('new');
+            setIceConnectionState('new');
+            setIsReconnecting(false);
         };
     }, [roomId, userName, localVideoRef, connectWebSocket, createPeer, addTracksIfNeeded, stopHeartbeat, stopStatsMonitoring]);
 
@@ -502,13 +575,21 @@ export function useWebRTC(
         });
     }, [micActive, videoActive]);
 
-    // Send chat message
+    // Send chat message with enhanced error handling
     const sendMessage = useCallback((msg: string) => {
         const dc = dataChannelRef.current;
+        console.log("[DataChannel] Attempting to send message:", msg);
+        console.log("[DataChannel] Channel state:", dc?.readyState);
+        
         if (dc && dc.readyState === "open") {
-            dc.send(msg);
+            try {
+                dc.send(msg);
+                console.log("[DataChannel] Message sent successfully");
+            } catch (error) {
+                console.error("[DataChannel] Error sending message:", error);
+            }
         } else {
-            console.warn("[DataChannel] Cannot send message - channel not open");
+            console.warn("[DataChannel] Cannot send message - channel not open. State:", dc?.readyState);
         }
     }, []);
 
