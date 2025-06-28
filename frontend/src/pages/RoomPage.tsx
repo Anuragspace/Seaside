@@ -1,13 +1,13 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Mic, MicOff, Video, VideoOff, Phone, Users, MessageSquare, Share2 } from 'lucide-react';
+import { ArrowLeft, Mic, MicOff, Video, VideoOff, Phone, Users, MessageSquare, Share2, Settings } from 'lucide-react';
 import Layout from '../components/Layout';
-import { useWebRTC } from '../hooks/useWebRTC'; // Import the hook
-import ChatBox from '../components/ChatBox'; // Adjust path as needed
+import { useWebRTC } from '../hooks/useWebRTC';
+import ChatBox from '../components/ChatBox';
+import ConnectionStatus from '../components/ConnectionStatus';
 import { setupAudio, startRecording, stopRecording } from '../hooks/audioRecord';
-import { setupVideo, startVideoRecording, stopVideoRecording,  } from '../hooks/videoRecord';
+import { setupVideo, startVideoRecording, stopVideoRecording } from '../hooks/videoRecord';
 
-// --- Helper for getting query params ---
 function useQuery() {
   return new URLSearchParams(useLocation().search);
 }
@@ -21,14 +21,25 @@ const RoomPage: React.FC = () => {
   const [micActive, setMicActive] = useState(true);
   const [videoActive, setVideoActive] = useState(true);
   const [messages, setMessages] = useState<{ text: string; fromMe: boolean; id: number }[]>([]);
+  const [showStats, setShowStats] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
-  // For now, assume the first user is the host if their name is 'You'
+  // Determine if user is host (first to create room)
   const isHost = userName === 'You';
 
-  const { sendMessage, onMessage, dataChannelOpen } = useWebRTC(
+  const { 
+    sendMessage, 
+    onMessage, 
+    dataChannelOpen,
+    connectionState,
+    iceConnectionState,
+    isReconnecting,
+    connectionStats,
+    reconnect
+  } = useWebRTC(
     roomId!,
     userName,
     localVideoRef,
@@ -45,18 +56,68 @@ const RoomPage: React.FC = () => {
 
     document.title = `SeaSide | Room ${roomId}`;
 
+    // Prevent page refresh/close without warning
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
       document.title = 'SeaSide';
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [roomId, navigate]);
 
+  // Handle fullscreen toggle
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return;
+      
+      switch (e.key.toLowerCase()) {
+        case 'm':
+          setMicActive(!micActive);
+          break;
+        case 'v':
+          setVideoActive(!videoActive);
+          break;
+        case 'f':
+          toggleFullscreen();
+          break;
+        case 'escape':
+          if (isFullscreen) {
+            document.exitFullscreen();
+            setIsFullscreen(false);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [micActive, videoActive, isFullscreen]);
+
   // Send chat to peer
   const handleSend = (msg: string) => {
-    sendMessage(msg); // Send to peer
-    setMessages((prev) => [
-      ...prev,
-      { text: msg, fromMe: true, id: Date.now() },
-    ]);
+    if (dataChannelOpen) {
+      sendMessage(msg);
+      setMessages((prev) => [
+        ...prev,
+        { text: msg, fromMe: true, id: Date.now() },
+      ]);
+    }
   };
 
   // Listen for incoming messages from peer
@@ -72,32 +133,81 @@ const RoomPage: React.FC = () => {
     return () => onMessage(undefined);
   }, [onMessage]);
 
+  // Copy room ID to clipboard
+  const copyRoomId = async () => {
+    if (roomId) {
+      await navigator.clipboard.writeText(roomId);
+      // You could add a toast notification here
+    }
+  };
+
+  // Leave room with confirmation
+  const leaveRoom = () => {
+    if (window.confirm('Are you sure you want to leave the room?')) {
+      navigate('/');
+    }
+  };
+
   return (
     <Layout showNavbar={false}>
-      <div className="w-full h-screen bg-black text-white flex flex-col">
-        <div className="p-4 flex items-center">
+      <div className="w-full h-screen bg-black text-white flex flex-col relative">
+        {/* Header */}
+        <div className="p-4 flex items-center bg-gradient-to-b from-black/80 to-transparent backdrop-blur-sm relative z-30">
           <button
-            onClick={() => navigate('/')}
+            onClick={leaveRoom}
             className="mr-4 rounded-full p-2 bg-gray-800/50 hover:bg-gray-700/60 transition-colors"
+            title="Leave room"
           >
             <ArrowLeft size={20} />
           </button>
-          <h2 className="text-xl font-medium flex-1">Room: {roomId}</h2>
+          
+          <div className="flex-1">
+            <h2 className="text-xl font-medium">Room: {roomId}</h2>
+            <p className="text-sm text-gray-400">
+              {isHost ? 'Host' : 'Guest'} • {userName}
+            </p>
+          </div>
+          
           <div className="flex items-center space-x-2">
-            <button className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60">
+            <button 
+              onClick={() => setShowStats(!showStats)}
+              className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors"
+              title="Toggle stats"
+            >
+              <Settings size={20} />
+            </button>
+            <button 
+              onClick={copyRoomId}
+              className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors"
+              title="Copy room ID"
+            >
+              <Share2 size={20} />
+            </button>
+            <button className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors">
               <Users size={20} />
             </button>
-            <button className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60">
+            <button className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors">
               <MessageSquare size={20} />
-            </button>
-            <button className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60">
-              <Share2 size={20} />
             </button>
           </div>
         </div>
 
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-          <div className="relative aspect-video bg-gray-800 rounded-xl overflow-hidden flex items-center justify-center">
+        {/* Connection Status */}
+        {showStats && (
+          <ConnectionStatus
+            connectionState={connectionState}
+            iceConnectionState={iceConnectionState}
+            isReconnecting={isReconnecting}
+            dataChannelOpen={dataChannelOpen}
+            onReconnect={reconnect}
+            connectionStats={connectionStats}
+          />
+        )}
+
+        {/* Video Grid */}
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 relative">
+          {/* Local Video */}
+          <div className="relative aspect-video bg-gray-800 rounded-xl overflow-hidden flex items-center justify-center group">
             <video
               ref={localVideoRef}
               autoPlay
@@ -105,54 +215,115 @@ const RoomPage: React.FC = () => {
               muted
               className="w-full h-full object-cover"
             />
-            <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/60 rounded-lg text-sm">
+            <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/60 rounded-lg text-sm backdrop-blur-sm">
               You ({userName})
             </div>
+            {!videoActive && (
+              <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
+                <VideoOff size={48} className="text-gray-400" />
+              </div>
+            )}
+            {!micActive && (
+              <div className="absolute top-4 left-4 p-2 bg-red-500/80 rounded-full">
+                <MicOff size={16} />
+              </div>
+            )}
           </div>
-          <div className="relative aspect-video bg-gray-800 rounded-xl overflow-hidden flex items-center justify-center">
+
+          {/* Remote Video */}
+          <div className="relative aspect-video bg-gray-800 rounded-xl overflow-hidden flex items-center justify-center group">
             <video
               ref={remoteVideoRef}
               autoPlay
               playsInline
               className="w-full h-full object-cover"
             />
-            <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/60 rounded-lg text-sm">
+            <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/60 rounded-lg text-sm backdrop-blur-sm">
               Remote
             </div>
+            {connectionState !== 'connected' && (
+              <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
+                <div className="text-center">
+                  <Users size={48} className="text-gray-400 mx-auto mb-2" />
+                  <p className="text-gray-400">
+                    {isReconnecting ? 'Reconnecting...' : 'Waiting for peer...'}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="p-6 flex justify-center items-center space-x-4">
+        {/* Controls */}
+        <div className="p-6 flex justify-center items-center space-x-4 bg-gradient-to-t from-black/80 to-transparent backdrop-blur-sm">
           <button
             onClick={() => setMicActive(!micActive)}
-            className={`p-4 rounded-full ${micActive ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-500 hover:bg-red-600'} transition-colors`}
+            className={`p-4 rounded-full transition-all duration-200 ${
+              micActive 
+                ? 'bg-gray-700 hover:bg-gray-600 text-white' 
+                : 'bg-red-500 hover:bg-red-600 text-white'
+            }`}
+            title={`${micActive ? 'Mute' : 'Unmute'} microphone (M)`}
           >
             {micActive ? <Mic size={24} /> : <MicOff size={24} />}
           </button>
 
           <button
             onClick={() => setVideoActive(!videoActive)}
-            className={`p-4 rounded-full ${videoActive ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-500 hover:bg-red-600'} transition-colors`}
+            className={`p-4 rounded-full transition-all duration-200 ${
+              videoActive 
+                ? 'bg-gray-700 hover:bg-gray-600 text-white' 
+                : 'bg-red-500 hover:bg-red-600 text-white'
+            }`}
+            title={`${videoActive ? 'Turn off' : 'Turn on'} camera (V)`}
           >
             {videoActive ? <Video size={24} /> : <VideoOff size={24} />}
           </button>
 
-          <button className="p-4 rounded-full bg-red-600 hover:bg-red-700 transition-colors" onClick={() => navigate('/')}>
+          <button 
+            onClick={leaveRoom}
+            className="p-4 rounded-full bg-red-600 hover:bg-red-700 transition-colors text-white"
+            title="Leave room"
+          >
             <Phone size={24} />
           </button>
+
+          <button
+            onClick={toggleFullscreen}
+            className="p-4 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors text-white"
+            title="Toggle fullscreen (F)"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 3H5C3.89543 3 3 3.89543 3 5V8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M21 8V5C21 3.89543 20.1046 3 19 3H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M16 21H19C20.1046 21 21 20.1046 21 19V16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M3 16V19C3 20.1046 3.89543 21 5 21H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
         </div>
-          {/* Recording button - only audio, with countdown and toggle */}
+
+        {/* Recording Controls */}
+        <div className="absolute bottom-24 left-4 flex flex-col space-y-2">
           <RecordingAudioButton />
           <RecordingVideoButton />
+        </div>
 
-        <ChatBox onSend={handleSend} messages={messages} dataChannelOpen={dataChannelOpen} />
+        {/* Chat */}
+        <ChatBox 
+          onSend={handleSend} 
+          messages={messages} 
+          dataChannelOpen={dataChannelOpen} 
+        />
+
+        {/* Keyboard Shortcuts Help */}
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-xs text-gray-500 text-center">
+          Press M to toggle mic • V for video • F for fullscreen
+        </div>
       </div>
     </Layout>
   );
 };
 
-export default RoomPage;
-// --- RecordingAudioButton component ---
 const RecordingAudioButton: React.FC = () => {
   const [recording, setRecording] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -176,7 +347,7 @@ const RecordingAudioButton: React.FC = () => {
   }, [countdown]);
 
   const handleStartRecording = () => {
-    setCountdown(3); // 3 second countdown
+    setCountdown(3);
   };
 
   const handleStopRecording = () => {
@@ -198,7 +369,7 @@ const RecordingAudioButton: React.FC = () => {
       {!recording && countdown === null && (
         <button
           onClick={handleStartRecording}
-          className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-sm"
+          className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-sm backdrop-blur-sm"
         >
           Record Audio
         </button>
@@ -206,7 +377,7 @@ const RecordingAudioButton: React.FC = () => {
       {countdown !== null && (
         <button
           disabled
-          className="px-4 py-2 rounded bg-gray-500 text-sm cursor-not-allowed"
+          className="px-4 py-2 rounded bg-gray-500 text-sm cursor-not-allowed backdrop-blur-sm"
         >
           Starting in {countdown}...
         </button>
@@ -214,7 +385,7 @@ const RecordingAudioButton: React.FC = () => {
       {recording && (
         <button
           onClick={handleStopRecording}
-          className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-sm"
+          className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-sm backdrop-blur-sm"
         >
           Stop Recording Audio
         </button>
@@ -222,7 +393,7 @@ const RecordingAudioButton: React.FC = () => {
     </div>
   );
 };
-// --- RecordingVideoButton component ---
+
 const RecordingVideoButton: React.FC = () => {
   const [recordingVideo, setRecordingVideo] = useState(false);
   const [countdownVideo, setCountdownVideo] = useState<number | null>(null);
@@ -256,7 +427,7 @@ const RecordingVideoButton: React.FC = () => {
   }, [countdownVideo]);
 
   const handleStartRecordingVideo = () => {
-    setCountdownVideo(3); // 3 second countdown
+    setCountdownVideo(3);
   };
 
   const handleStopRecordingVideo = () => {
@@ -274,7 +445,7 @@ const RecordingVideoButton: React.FC = () => {
       {!recordingVideo && countdownVideo === null && (
         <button
           onClick={handleStartRecordingVideo}
-          className="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-sm"
+          className="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-sm backdrop-blur-sm"
         >
           Record Video
         </button>
@@ -282,7 +453,7 @@ const RecordingVideoButton: React.FC = () => {
       {countdownVideo !== null && (
         <button
           disabled
-          className="px-4 py-2 rounded bg-gray-500 text-sm cursor-not-allowed"
+          className="px-4 py-2 rounded bg-gray-500 text-sm cursor-not-allowed backdrop-blur-sm"
         >
           Starting in {countdownVideo}...
         </button>
@@ -291,11 +462,11 @@ const RecordingVideoButton: React.FC = () => {
         <>
           <button
             onClick={handleStopRecordingVideo}
-            className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-sm"
+            className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-sm backdrop-blur-sm"
           >
             Stop Recording Video
           </button>
-          <div className="video-timer absolute top-2 left-2 text-white text-sm bg-black/60 px-2 py-1 rounded">
+          <div className="video-timer text-white text-sm bg-black/60 px-2 py-1 rounded backdrop-blur-sm">
             {timer}
           </div>
         </>
@@ -303,3 +474,5 @@ const RecordingVideoButton: React.FC = () => {
     </div>
   );
 };
+
+export default RoomPage;

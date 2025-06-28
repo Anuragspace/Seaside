@@ -3,6 +3,7 @@ package video
 import (
 	"log"
 	"sync"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
@@ -65,6 +66,7 @@ func CreateRoomRequestHandler(c *fiber.Ctx) error {
 	log.Printf("Room created: %s", roomID)
 	return c.JSON(response{RoomID: roomID})
 }
+
 func WebSocketJoinHandler(c *websocket.Conn) {
 	roomID := c.Query("roomID")
 	if roomID == "" {
@@ -97,6 +99,35 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 		go broadcaster()
 	})
 
+	// Set up ping/pong for connection health monitoring
+	c.SetPongHandler(func(string) error {
+		log.Printf("Received pong from room %s", roomID)
+		return nil
+	})
+
+	// Start heartbeat for this connection
+	heartbeatTicker := time.NewTicker(30 * time.Second)
+	defer heartbeatTicker.Stop()
+
+	// Channel to signal when to stop heartbeat
+	done := make(chan bool)
+
+	// Heartbeat goroutine
+	go func() {
+		for {
+			select {
+			case <-heartbeatTicker.C:
+				if err := c.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+					log.Printf("Heartbeat failed for room %s: %v", roomID, err)
+					done <- true
+					return
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+
 	// Listen for messages from this participant
 	for {
 		var msg BroadcastMessage
@@ -106,11 +137,28 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 			break
 		}
 
+		// Handle ping messages from client
+		if msgType, ok := msg.Message["type"].(string); ok && msgType == "ping" {
+			// Send pong response
+			c.WriteJSON(map[string]interface{}{
+				"type": "pong",
+			})
+			continue
+		}
+
 		msg.Client = c
 		msg.RoomID = roomID
 
-		broadcast <- msg
+		// Add message validation and rate limiting here if needed
+		select {
+		case broadcast <- msg:
+		case <-time.After(5 * time.Second):
+			log.Printf("Broadcast channel full, dropping message from room %s", roomID)
+		}
 	}
+
+	// Signal heartbeat to stop
+	done <- true
 
 	// Cleanup after connection closes
 	AllRooms.RemoveClient(roomID, c)
