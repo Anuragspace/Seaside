@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Mic, MicOff, Video, VideoOff, Phone, Users, MessageSquare, Share2, Settings } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useWebRTC } from '../hooks/useWebRTC';
+import { useChat } from '../hooks/useChat';
 import ChatBox from '../components/ChatBox';
 import ConnectionStatus from '../components/ConnectionStatus';
 import { setupAudio, startRecording, stopRecording } from '../hooks/audioRecord';
@@ -20,9 +21,9 @@ const RoomPage: React.FC = () => {
 
   const [micActive, setMicActive] = useState(true);
   const [videoActive, setVideoActive] = useState(true);
-  const [messages, setMessages] = useState<{ text: string; fromMe: boolean; id: number }[]>([]);
   const [showStats, setShowStats] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showChat, setShowChat] = useState(true);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -30,8 +31,9 @@ const RoomPage: React.FC = () => {
   // Determine if user is host (first to create room)
   const isHost = userName === 'You';
 
+  // WebRTC hook for video/audio
   const { 
-    sendMessage, 
+    sendMessage: sendWebRTCMessage, 
     onMessage, 
     dataChannelOpen,
     connectionState,
@@ -47,6 +49,23 @@ const RoomPage: React.FC = () => {
     micActive,
     videoActive,
     isHost
+  );
+
+  // Enhanced chat hook
+  const {
+    messages,
+    isTyping,
+    chatStats,
+    isConnected: chatConnected,
+    sendMessage: sendChatMessage,
+    handleTyping,
+    clearMessages,
+    connectChat,
+  } = useChat(
+    roomId!,
+    userName,
+    dataChannelOpen,
+    sendWebRTCMessage
   );
 
   useEffect(() => {
@@ -96,6 +115,9 @@ const RoomPage: React.FC = () => {
         case 'f':
           toggleFullscreen();
           break;
+        case 'c':
+          setShowChat(!showChat);
+          break;
         case 'escape':
           if (isFullscreen) {
             document.exitFullscreen();
@@ -107,31 +129,12 @@ const RoomPage: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [micActive, videoActive, isFullscreen]);
+  }, [micActive, videoActive, isFullscreen, showChat]);
 
-  // Send chat to peer
-  const handleSend = (msg: string) => {
-    if (dataChannelOpen) {
-      sendMessage(msg);
-      setMessages((prev) => [
-        ...prev,
-        { text: msg, fromMe: true, id: Date.now() },
-      ]);
-    }
+  // Enhanced chat send handler
+  const handleSendChat = (msg: string) => {
+    sendChatMessage(msg);
   };
-
-  // Listen for incoming messages from peer
-  useEffect(() => {
-    if (!onMessage) return;
-    const handler = (msg: string) => {
-      setMessages((prev) => [
-        ...prev,
-        { text: msg, fromMe: false, id: Date.now() },
-      ]);
-    };
-    onMessage(handler);
-    return () => onMessage(undefined);
-  }, [onMessage]);
 
   // Copy room ID to clipboard
   const copyRoomId = async () => {
@@ -186,7 +189,15 @@ const RoomPage: React.FC = () => {
             <button className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors">
               <Users size={20} />
             </button>
-            <button className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors">
+            <button 
+              onClick={() => setShowChat(!showChat)}
+              className={`p-2 rounded-full transition-colors ${
+                showChat 
+                  ? 'bg-blue-600 hover:bg-blue-700' 
+                  : 'bg-gray-800/50 hover:bg-gray-700/60'
+              }`}
+              title="Toggle chat (C)"
+            >
               <MessageSquare size={20} />
             </button>
           </div>
@@ -198,126 +209,95 @@ const RoomPage: React.FC = () => {
             connectionState={connectionState}
             iceConnectionState={iceConnectionState}
             isReconnecting={isReconnecting}
-            dataChannelOpen={dataChannelOpen}
-            onReconnect={reconnect}
             connectionStats={connectionStats}
+            reconnect={reconnect}
           />
         )}
 
-        {/* Video Grid */}
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 relative">
+        {/* Video Container */}
+        <div className="flex-1 relative">
           {/* Local Video */}
-          <div className="relative aspect-video bg-gray-800 rounded-xl overflow-hidden flex items-center justify-center group">
+          <div className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden border-2 border-gray-600 z-20">
             <video
               ref={localVideoRef}
               autoPlay
-              playsInline
               muted
+              playsInline
               className="w-full h-full object-cover"
             />
-            <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/60 rounded-lg text-sm backdrop-blur-sm">
-              You ({userName})
+            <div className="absolute bottom-2 left-2 bg-black/50 px-2 py-1 rounded text-xs">
+              You
             </div>
-            {!videoActive && (
-              <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
-                <VideoOff size={48} className="text-gray-400" />
-              </div>
-            )}
-            {!micActive && (
-              <div className="absolute top-4 left-4 p-2 bg-red-500/80 rounded-full">
-                <MicOff size={16} />
-              </div>
-            )}
           </div>
 
           {/* Remote Video */}
-          <div className="relative aspect-video bg-gray-800 rounded-xl overflow-hidden flex items-center justify-center group">
+          <div className="w-full h-full flex items-center justify-center">
             <video
               ref={remoteVideoRef}
               autoPlay
               playsInline
               className="w-full h-full object-cover"
             />
-            <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/60 rounded-lg text-sm backdrop-blur-sm">
-              Remote
-            </div>
-            {connectionState !== 'connected' && (
-              <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
+            {!remoteVideoRef.current?.srcObject && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
                 <div className="text-center">
-                  <Users size={48} className="text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-400">
-                    {isReconnecting ? 'Reconnecting...' : 'Waiting for peer...'}
-                  </p>
+                  <div className="text-6xl mb-4">👋</div>
+                  <h3 className="text-xl font-medium mb-2">Waiting for others to join...</h3>
+                  <p className="text-gray-400">Share the room ID with someone to start chatting</p>
                 </div>
               </div>
             )}
           </div>
+
+          {/* Controls Overlay */}
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center space-x-4 bg-black/50 backdrop-blur-sm rounded-full px-6 py-3">
+            <button
+              onClick={() => setMicActive(!micActive)}
+              className={`p-3 rounded-full transition-colors ${
+                micActive ? 'bg-gray-600 hover:bg-gray-700' : 'bg-red-600 hover:bg-red-700'
+              }`}
+              title={`${micActive ? 'Mute' : 'Unmute'} microphone (M)`}
+            >
+              {micActive ? <Mic size={20} /> : <MicOff size={20} />}
+            </button>
+
+            <button
+              onClick={() => setVideoActive(!videoActive)}
+              className={`p-3 rounded-full transition-colors ${
+                videoActive ? 'bg-gray-600 hover:bg-gray-700' : 'bg-red-600 hover:bg-red-700'
+              }`}
+              title={`${videoActive ? 'Turn off' : 'Turn on'} camera (V)`}
+            >
+              {videoActive ? <Video size={20} /> : <VideoOff size={20} />}
+            </button>
+
+            <button
+              onClick={leaveRoom}
+              className="p-3 rounded-full bg-red-600 hover:bg-red-700 transition-colors"
+              title="Leave room"
+            >
+              <Phone size={20} className="rotate-90" />
+            </button>
+          </div>
         </div>
 
-        {/* Controls */}
-        <div className="p-6 flex justify-center items-center space-x-4 bg-gradient-to-t from-black/80 to-transparent backdrop-blur-sm">
-          <button
-            onClick={() => setMicActive(!micActive)}
-            className={`p-4 rounded-full transition-all duration-200 ${
-              micActive 
-                ? 'bg-gray-700 hover:bg-gray-600 text-white' 
-                : 'bg-red-500 hover:bg-red-600 text-white'
-            }`}
-            title={`${micActive ? 'Mute' : 'Unmute'} microphone (M)`}
-          >
-            {micActive ? <Mic size={24} /> : <MicOff size={24} />}
-          </button>
-
-          <button
-            onClick={() => setVideoActive(!videoActive)}
-            className={`p-4 rounded-full transition-all duration-200 ${
-              videoActive 
-                ? 'bg-gray-700 hover:bg-gray-600 text-white' 
-                : 'bg-red-500 hover:bg-red-600 text-white'
-            }`}
-            title={`${videoActive ? 'Turn off' : 'Turn on'} camera (V)`}
-          >
-            {videoActive ? <Video size={24} /> : <VideoOff size={24} />}
-          </button>
-
-          <button 
-            onClick={leaveRoom}
-            className="p-4 rounded-full bg-red-600 hover:bg-red-700 transition-colors text-white"
-            title="Leave room"
-          >
-            <Phone size={24} />
-          </button>
-
-          <button
-            onClick={toggleFullscreen}
-            className="p-4 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors text-white"
-            title="Toggle fullscreen (F)"
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M8 3H5C3.89543 3 3 3.89543 3 5V8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M21 8V5C21 3.89543 20.1046 3 19 3H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M16 21H19C20.1046 21 21 20.1046 21 19V16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M3 16V19C3 20.1046 3.89543 21 5 21H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-        </div>
+        {/* Enhanced Chat Box */}
+        {showChat && (
+          <ChatBox
+            onSend={handleSendChat}
+            onTyping={handleTyping}
+            messages={messages}
+            isTyping={isTyping}
+            chatStats={chatStats}
+            isConnected={chatConnected}
+            dataChannelOpen={dataChannelOpen}
+          />
+        )}
 
         {/* Recording Controls */}
-        <div className="absolute bottom-24 left-4 flex flex-col space-y-2">
+        <div className="absolute top-20 right-4 flex flex-col space-y-2">
           <RecordingAudioButton />
           <RecordingVideoButton />
-        </div>
-
-        {/* Chat */}
-        <ChatBox 
-          onSend={handleSend} 
-          messages={messages} 
-          dataChannelOpen={dataChannelOpen} 
-        />
-
-        {/* Keyboard Shortcuts Help */}
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-xs text-gray-500 text-center">
-          Press M to toggle mic • V for video • F for fullscreen
         </div>
       </div>
     </Layout>

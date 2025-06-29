@@ -20,7 +20,7 @@ export async function setupVideo() {
                 height: { ideal: 1080 },
                 frameRate: { ideal: 30 }
             },
-            audio: true // Enable audio for video recording
+            audio: false // Enable audio for video recording
         });
 
         if (videoRecord) {

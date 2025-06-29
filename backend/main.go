@@ -4,17 +4,19 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"seaside/internals/chat"
 	"seaside/internals/middleware"
 	"seaside/internals/video"
 
+	"time"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/etag"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/websocket/v2"
 	"github.com/joho/godotenv"
-	"time"
 )
 
 func setupRoutes(app *fiber.App) {
@@ -23,16 +25,24 @@ func setupRoutes(app *fiber.App) {
 	// Health check route
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
-			"status": "ok",
-			"message": "✅ Backend is up and running! Go back to https://seasides.vercel.app/ and Create Room ID",
+			"status":    "ok",
+			"message":   "✅ Backend is up and running! Go back to https://seasides.vercel.app/ and Create Room ID",
 			"timestamp": time.Now().Unix(),
 		})
 	})
 
 	// Stats endpoint for monitoring
 	app.Get("/stats", func(c *fiber.Ctx) error {
-		stats := video.AllRooms.GetRoomStats()
-		return c.JSON(stats)
+		videoStats := video.AllRooms.GetRoomStats()
+		chatStats := chat.GetChatStats()
+
+		// Combine video and chat stats
+		combinedStats := fiber.Map{
+			"video": videoStats,
+			"chat":  chatStats,
+		}
+
+		return c.JSON(combinedStats)
 	})
 
 	// Rate limiting for room creation
@@ -68,6 +78,25 @@ func setupRoutes(app *fiber.App) {
 		return fiber.ErrUpgradeRequired
 	})
 
+	// Chat WebSocket middleware
+	app.Use("/chat", func(c *fiber.Ctx) error {
+		// Validate room ID
+		roomID := c.Query("roomID")
+		if roomID == "" || len(roomID) < 6 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid room ID",
+			})
+		}
+
+		// IsWebSocketUpgrade returns true if the client
+		// requested upgrade to the WebSocket protocol.
+		if websocket.IsWebSocketUpgrade(c) {
+			c.Locals("allowed", true)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
+
 	// Create room endpoint
 	app.Get("/create-room", video.CreateRoomRequestHandler)
 
@@ -77,7 +106,17 @@ func setupRoutes(app *fiber.App) {
 		Origins:         []string{"*"},
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		
+
+		EnableCompression: true,
+	}))
+
+	// Chat WebSocket endpoint
+	app.Get("/chat", websocket.New(chat.ChatWebSocketHandler, websocket.Config{
+		// Enhanced WebSocket configuration
+		Origins:         []string{"*"},
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+
 		EnableCompression: true,
 	}))
 }
