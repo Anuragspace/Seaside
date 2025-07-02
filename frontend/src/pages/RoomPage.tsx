@@ -215,23 +215,9 @@ const RoomPage: React.FC = () => {
         )}
 
         {/* Video Container */}
-        <div className="flex-1 relative">
-          {/* Local Video */}
-          <div className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden border-2 border-gray-600 z-20">
-            <video
-              ref={localVideoRef}
-              autoPlay
-              muted
-              playsInline
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute bottom-2 left-2 bg-black/50 px-2 py-1 rounded text-xs">
-              You
-            </div>
-          </div>
-
+        <div className="flex-1 flex flex-row items-center justify-center bg-black relative gap-x-4">
           {/* Remote Video */}
-          <div className="w-full h-full flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center">
             <video
               ref={remoteVideoRef}
               autoPlay
@@ -249,36 +235,50 @@ const RoomPage: React.FC = () => {
             )}
           </div>
 
-          {/* Controls Overlay */}
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center space-x-4 bg-black/50 backdrop-blur-sm rounded-full px-6 py-3">
-            <button
-              onClick={() => setMicActive(!micActive)}
-              className={`p-3 rounded-full transition-colors ${
-                micActive ? 'bg-gray-600 hover:bg-gray-700' : 'bg-red-600 hover:bg-red-700'
-              }`}
-              title={`${micActive ? 'Mute' : 'Unmute'} microphone (M)`}
-            >
-              {micActive ? <Mic size={20} /> : <MicOff size={20} />}
-            </button>
-
-            <button
-              onClick={() => setVideoActive(!videoActive)}
-              className={`p-3 rounded-full transition-colors ${
-                videoActive ? 'bg-gray-600 hover:bg-gray-700' : 'bg-red-600 hover:bg-red-700'
-              }`}
-              title={`${videoActive ? 'Turn off' : 'Turn on'} camera (V)`}
-            >
-              {videoActive ? <Video size={20} /> : <VideoOff size={20} />}
-            </button>
-
-            <button
-              onClick={leaveRoom}
-              className="p-3 rounded-full bg-red-600 hover:bg-red-700 transition-colors"
-              title="Leave room"
-            >
-              <Phone size={20} className="rotate-90" />
-            </button>
+          {/* Local Video */}
+          <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden border-2 border-gray-600 relative flex items-center justify-center">
+            <video
+              ref={localVideoRef}
+              autoPlay
+              muted
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute bottom-2 left-2 bg-black/50 px-2 py-1 rounded text-xs">
+              You
+            </div>
           </div>
+        </div>
+
+        {/* Controls Overlay */}
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center space-x-4 bg-black/50 backdrop-blur-sm rounded-full px-6 py-3">
+          <button
+            onClick={() => setMicActive(!micActive)}
+            className={`p-3 rounded-full transition-colors ${
+              micActive ? 'bg-gray-600 hover:bg-gray-700' : 'bg-red-600 hover:bg-red-700'
+            }`}
+            title={`${micActive ? 'Mute' : 'Unmute'} microphone (M)`}
+          >
+            {micActive ? <Mic size={20} /> : <MicOff size={20} />}
+          </button>
+
+          <button
+            onClick={() => setVideoActive(!videoActive)}
+            className={`p-3 rounded-full transition-colors ${
+              videoActive ? 'bg-gray-600 hover:bg-gray-700' : 'bg-red-600 hover:bg-red-700'
+            }`}
+            title={`${videoActive ? 'Turn off' : 'Turn on'} camera (V)`}
+          >
+            {videoActive ? <Video size={20} /> : <VideoOff size={20} />}
+          </button>
+
+          <button
+            onClick={leaveRoom}
+            className="p-3 rounded-full bg-red-600 hover:bg-red-700 transition-colors"
+            title="Leave room"
+          >
+            <Phone size={20} className="rotate-90" />
+          </button>
         </div>
 
         {/* Enhanced Chat Box */}
