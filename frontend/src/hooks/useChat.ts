@@ -102,9 +102,23 @@ export function useChat(
       type: data.type || "chat",
     };
 
-    // Add message to state
-    setMessages((prev: ChatMessage[]) => [...prev, message]);
-    setChatStats((prev: ChatStats) => ({ ...prev, totalMessages: prev.totalMessages + 1 }));
+    // Only add to messages if not a typing indicator
+    if (["chat", "system", "join", "leave", "participants"].includes(message.type)) {
+      setMessages((prev: ChatMessage[]) => {
+        // Prevent duplicate: if a message with same text, from, and timestamp exists, don't add
+        const exists = prev.some(
+          m =>
+            m.text === message.text &&
+            m.from === message.from &&
+            m.timestamp.getTime() === message.timestamp.getTime()
+        );
+        if (!exists) {
+          return [...prev, message];
+        }
+        return prev;
+      });
+      setChatStats((prev: ChatStats) => ({ ...prev, totalMessages: prev.totalMessages + 1 }));
+    }
 
     // Handle different message types
     switch (data.type) {
