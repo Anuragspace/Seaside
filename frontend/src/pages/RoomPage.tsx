@@ -215,9 +215,9 @@ const RoomPage: React.FC = () => {
         )}
 
         {/* Video Container */}
-        <div className="flex-1 flex flex-row items-center justify-center bg-black relative gap-x-4">
+        <div className="flex-1 flex flex-col md:flex-row items-center justify-center bg-black relative gap-4 h-full min-h-[300px]">
           {/* Remote Video */}
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center min-h-[200px] w-full">
             <video
               ref={remoteVideoRef}
               autoPlay
@@ -236,7 +236,7 @@ const RoomPage: React.FC = () => {
           </div>
 
           {/* Local Video */}
-          <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden border-2 border-gray-600 relative flex items-center justify-center">
+          <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden border-2 border-gray-600 relative flex items-center justify-center min-h-[200px] w-full">
             <video
               ref={localVideoRef}
               autoPlay
