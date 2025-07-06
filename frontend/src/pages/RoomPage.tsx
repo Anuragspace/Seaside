@@ -316,7 +316,7 @@ const RoomPage: React.FC = () => {
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-xs text-gray-500 text-center">
+        <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 text-xs text-gray-500 text-center">
           Press M to toggle mic • V for video • F for fullscreen
         </div>
       </div>
