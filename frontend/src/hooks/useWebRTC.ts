@@ -28,6 +28,7 @@ export function useWebRTC(
     const reconnectTimeoutRef = useRef<number | null>(null);
     const heartbeatIntervalRef = useRef<number | null>(null);
     const statsIntervalRef = useRef<number | null>(null);
+    const initialSetupRef = useRef(false);
     
     const [dataChannelOpen, setDataChannelOpen] = useState(false);
     const [connectionState, setConnectionState] = useState<RTCPeerConnectionState>('new');
@@ -69,63 +70,63 @@ export function useWebRTC(
         }
     }, []);
 
-    // Mobile-optimized media constraints
-    const getMobileOptimizedConstraints = useCallback(() => {
+    // Get initial media constraints (always request both audio and video)
+    const getInitialConstraints = useCallback(() => {
         if (isMobile) {
             return {
-                video: videoActive ? {
+                video: {
                     width: { ideal: 640, max: 1280 },
                     height: { ideal: 480, max: 720 },
                     frameRate: { ideal: 15, max: 30 },
                     facingMode: "user"
-                } : false,
-                audio: micActive ? {
+                },
+                audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
                     autoGainControl: true
-                } : false
+                }
             };
         } else {
-            // Desktop constraints (unchanged)
+            // Desktop constraints
             return {
-                video: videoActive ? {
+                video: {
                     width: { ideal: 1280, max: 1920 },
                     height: { ideal: 720, max: 1080 },
                     frameRate: { ideal: 30, max: 60 }
-                } : false,
-                audio: micActive ? {
+                },
+                audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
                     autoGainControl: true,
                     sampleRate: 48000
-                } : false
+                }
             };
         }
-    }, [videoActive, micActive, isMobile]);
+    }, [isMobile]);
 
     // Fallback constraints for mobile devices
     const getFallbackConstraints = useCallback(() => {
         if (isMobile) {
             return {
-                video: videoActive ? {
+                video: {
                     width: { ideal: 320, max: 640 },
                     height: { ideal: 240, max: 480 },
                     frameRate: { ideal: 15, max: 24 }
-                } : false,
-                audio: micActive
+                },
+                audio: true
             };
         }
         return {
-            video: videoActive,
-            audio: micActive
+            video: true,
+            audio: true
         };
-    }, [videoActive, micActive, isMobile]);
+    }, [isMobile]);
 
     // Enhanced getUserMedia with mobile fallbacks
     const getUserMediaWithFallback = useCallback(async () => {
         try {
             console.log("[Media] Attempting to get user media with optimized constraints");
-            const constraints = getMobileOptimizedConstraints();
+            const constraints = getInitialConstraints();
             console.log("[Media] Using constraints:", constraints);
             
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -148,8 +149,8 @@ export function useWebRTC(
                 try {
                     console.log("[Media] Trying basic constraints as last resort");
                     const basicStream = await navigator.mediaDevices.getUserMedia({
-                        video: videoActive,
-                        audio: micActive
+                        video: true,
+                        audio: true
                     });
                     console.log("[Media] Successfully acquired media stream with basic constraints");
                     return basicStream;
@@ -159,7 +160,7 @@ export function useWebRTC(
                 }
             }
         }
-    }, [getMobileOptimizedConstraints, getFallbackConstraints, videoActive, micActive]);
+    }, [getInitialConstraints, getFallbackConstraints]);
 
     // Enhanced data channel setup with proper error handling
     const setupDataChannel = useCallback((dc: RTCDataChannel) => {
@@ -602,9 +603,9 @@ export function useWebRTC(
         }
     }, []);
 
-    // Main effect with mobile optimizations
+    // MAIN EFFECT - Only runs once for initial setup
     useEffect(() => {
-        if (!roomId || !userName) return;
+        if (!roomId || !userName || initialSetupRef.current) return;
 
         let localStream: MediaStream;
 
@@ -641,6 +642,8 @@ export function useWebRTC(
                 } else {
                     connectWebSocket();
                 }
+
+                initialSetupRef.current = true;
 
             } catch (error) {
                 console.error("[Setup] Error:", error);
@@ -688,6 +691,7 @@ export function useWebRTC(
             makingOfferRef.current = false;
             ignoreOfferRef.current = false;
             wsSendBuffer.current = [];
+            initialSetupRef.current = false;
             
             // Reset state
             setDataChannelOpen(false);
@@ -695,18 +699,24 @@ export function useWebRTC(
             setIceConnectionState('new');
             setIsReconnecting(false);
         };
-    }, [roomId, userName, localVideoRef, connectWebSocket, createPeer, addTracksIfNeeded, stopHeartbeat, stopStatsMonitoring, getUserMediaWithFallback, isMobile]);
+    }, [roomId, userName]); // Removed micActive and videoActive from dependencies
 
-    // Track state changes effect with mobile considerations
+    // SEPARATE EFFECT - Only handles track enable/disable without reconnecting
     useEffect(() => {
         if (!localStreamRef.current) return;
 
+        console.log("[Track Control] Updating track states - mic:", micActive, "video:", videoActive);
+
+        // Update audio tracks
         localStreamRef.current.getAudioTracks().forEach(track => {
             track.enabled = micActive;
+            console.log("[Track Control] Audio track enabled:", track.enabled);
         });
 
+        // Update video tracks
         localStreamRef.current.getVideoTracks().forEach(track => {
             track.enabled = videoActive;
+            console.log("[Track Control] Video track enabled:", track.enabled);
         });
 
         // Mobile-specific: Handle video element visibility
