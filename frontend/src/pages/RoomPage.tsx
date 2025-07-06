@@ -30,6 +30,9 @@ const RoomPage: React.FC = () => {
   // Determine if user is host (first to create room)
   const isHost = userName === 'You';
 
+  // Detect mobile device
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
   const { 
     sendMessage, 
     onMessage, 
@@ -64,11 +67,29 @@ const RoomPage: React.FC = () => {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
 
+    // Mobile-specific: Prevent zoom on double tap
+    if (isMobile) {
+      document.addEventListener('touchstart', (e) => {
+        if (e.touches.length > 1) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      let lastTouchEnd = 0;
+      document.addEventListener('touchend', (e) => {
+        const now = (new Date()).getTime();
+        if (now - lastTouchEnd <= 300) {
+          e.preventDefault();
+        }
+        lastTouchEnd = now;
+      }, false);
+    }
+
     return () => {
       document.title = 'SeaSide';
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [roomId, navigate]);
+  }, [roomId, navigate, isMobile]);
 
   // Handle fullscreen toggle
   const toggleFullscreen = () => {
@@ -81,8 +102,10 @@ const RoomPage: React.FC = () => {
     }
   };
 
-  // Handle keyboard shortcuts
+  // Handle keyboard shortcuts (disabled on mobile for better UX)
   useEffect(() => {
+    if (isMobile) return; // Disable keyboard shortcuts on mobile
+
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       
@@ -107,7 +130,27 @@ const RoomPage: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [micActive, videoActive, isFullscreen]);
+  }, [micActive, videoActive, isFullscreen, isMobile]);
+
+  // Mobile-specific: Handle orientation change
+  useEffect(() => {
+    if (!isMobile) return;
+
+    const handleOrientationChange = () => {
+      // Force layout recalculation after orientation change
+      setTimeout(() => {
+        if (localVideoRef.current) {
+          localVideoRef.current.style.height = 'auto';
+        }
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.style.height = 'auto';
+        }
+      }, 100);
+    };
+
+    window.addEventListener('orientationchange', handleOrientationChange);
+    return () => window.removeEventListener('orientationchange', handleOrientationChange);
+  }, [isMobile]);
 
   // Send chat to peer
   const handleSend = (msg: string) => {
@@ -136,8 +179,18 @@ const RoomPage: React.FC = () => {
   // Copy room ID to clipboard
   const copyRoomId = async () => {
     if (roomId) {
-      await navigator.clipboard.writeText(roomId);
-      // You could add a toast notification here
+      try {
+        await navigator.clipboard.writeText(roomId);
+        // You could add a toast notification here
+      } catch (err) {
+        // Fallback for mobile browsers that don't support clipboard API
+        const textArea = document.createElement('textarea');
+        textArea.value = roomId;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
     }
   };
 
@@ -148,52 +201,69 @@ const RoomPage: React.FC = () => {
     }
   };
 
+  // Mobile-optimized video click handler
+  const handleVideoClick = (videoRef: React.RefObject<HTMLVideoElement>) => {
+    if (isMobile && videoRef.current) {
+      if (videoRef.current.paused) {
+        videoRef.current.play().catch(e => {
+          console.warn("[Video] Play failed:", e);
+        });
+      }
+    }
+  };
+
   return (
     <Layout showNavbar={false}>
-      <div className="w-full h-screen bg-black text-white flex flex-col relative">
+      <div className={`w-full h-screen bg-black text-white flex flex-col relative ${isMobile ? 'touch-manipulation' : ''}`}>
         {/* Header */}
-        <div className="p-4 flex items-center bg-gradient-to-b from-black/80 to-transparent backdrop-blur-sm relative z-30">
+        <div className={`p-4 flex items-center bg-gradient-to-b from-black/80 to-transparent backdrop-blur-sm relative z-30 ${isMobile ? 'p-2' : ''}`}>
           <button
             onClick={leaveRoom}
-            className="mr-4 rounded-full p-2 bg-gray-800/50 hover:bg-gray-700/60 transition-colors"
+            className={`mr-4 rounded-full p-2 bg-gray-800/50 hover:bg-gray-700/60 transition-colors ${isMobile ? 'p-3 mr-2' : ''}`}
             title="Leave room"
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={isMobile ? 24 : 20} />
           </button>
           
           <div className="flex-1">
-            <h2 className="text-xl font-medium">Room: {roomId}</h2>
-            <p className="text-sm text-gray-400">
+            <h2 className={`font-medium ${isMobile ? 'text-lg' : 'text-xl'}`}>Room: {roomId}</h2>
+            <p className={`text-gray-400 ${isMobile ? 'text-xs' : 'text-sm'}`}>
               {isHost ? 'Host' : 'Guest'} • {userName}
             </p>
           </div>
           
-          <div className="flex items-center space-x-2">
-            <button 
-              onClick={() => setShowStats(!showStats)}
-              className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors"
-              title="Toggle stats"
-            >
-              <Settings size={20} />
-            </button>
+          <div className={`flex items-center ${isMobile ? 'space-x-1' : 'space-x-2'}`}>
+            {!isMobile && (
+              <button 
+                onClick={() => setShowStats(!showStats)}
+                className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors"
+                title="Toggle stats"
+              >
+                <Settings size={20} />
+              </button>
+            )}
             <button 
               onClick={copyRoomId}
-              className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors"
+              className={`rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors ${isMobile ? 'p-3' : 'p-2'}`}
               title="Copy room ID"
             >
-              <Share2 size={20} />
+              <Share2 size={isMobile ? 24 : 20} />
             </button>
-            <button className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors">
-              <Users size={20} />
-            </button>
-            <button className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors">
-              <MessageSquare size={20} />
-            </button>
+            {!isMobile && (
+              <>
+                <button className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors">
+                  <Users size={20} />
+                </button>
+                <button className="p-2 rounded-full bg-gray-800/50 hover:bg-gray-700/60 transition-colors">
+                  <MessageSquare size={20} />
+                </button>
+              </>
+            )}
           </div>
         </div>
 
         {/* Connection Status */}
-        {showStats && (
+        {showStats && !isMobile && (
           <ConnectionStatus
             connectionState={connectionState}
             iceConnectionState={iceConnectionState}
@@ -205,47 +275,56 @@ const RoomPage: React.FC = () => {
         )}
 
         {/* Video Grid */}
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 relative">
+        <div className={`flex-1 grid gap-4 p-4 relative ${isMobile ? 'grid-cols-1 gap-2 p-2' : 'grid-cols-1 md:grid-cols-2'}`}>
           {/* Local Video */}
-          <div className="relative aspect-video bg-gray-800 rounded-xl overflow-hidden flex items-center justify-center group">
+          <div 
+            className={`relative bg-gray-800 rounded-xl overflow-hidden flex items-center justify-center group ${isMobile ? 'aspect-video' : 'aspect-video'}`}
+            onClick={() => handleVideoClick(localVideoRef)}
+          >
             <video
               ref={localVideoRef}
               autoPlay
               playsInline
               muted
               className="w-full h-full object-cover"
+              style={{ 
+                transform: isMobile ? 'scaleX(-1)' : 'none' // Mirror local video on mobile
+              }}
             />
-            <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/60 rounded-lg text-sm backdrop-blur-sm">
+            <div className={`absolute bottom-4 left-4 px-3 py-1 bg-black/60 rounded-lg backdrop-blur-sm ${isMobile ? 'text-xs' : 'text-sm'}`}>
               You ({userName})
             </div>
             {!videoActive && (
               <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
-                <VideoOff size={48} className="text-gray-400" />
+                <VideoOff size={isMobile ? 64 : 48} className="text-gray-400" />
               </div>
             )}
             {!micActive && (
-              <div className="absolute top-4 left-4 p-2 bg-red-500/80 rounded-full">
-                <MicOff size={16} />
+              <div className={`absolute top-4 left-4 bg-red-500/80 rounded-full ${isMobile ? 'p-3' : 'p-2'}`}>
+                <MicOff size={isMobile ? 20 : 16} />
               </div>
             )}
           </div>
 
           {/* Remote Video */}
-          <div className="relative aspect-video bg-gray-800 rounded-xl overflow-hidden flex items-center justify-center group">
+          <div 
+            className={`relative bg-gray-800 rounded-xl overflow-hidden flex items-center justify-center group ${isMobile ? 'aspect-video' : 'aspect-video'}`}
+            onClick={() => handleVideoClick(remoteVideoRef)}
+          >
             <video
               ref={remoteVideoRef}
               autoPlay
               playsInline
               className="w-full h-full object-cover"
             />
-            <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/60 rounded-lg text-sm backdrop-blur-sm">
+            <div className={`absolute bottom-4 left-4 px-3 py-1 bg-black/60 rounded-lg backdrop-blur-sm ${isMobile ? 'text-xs' : 'text-sm'}`}>
               Remote
             </div>
             {connectionState !== 'connected' && (
               <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
                 <div className="text-center">
-                  <Users size={48} className="text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-400">
+                  <Users size={isMobile ? 64 : 48} className="text-gray-400 mx-auto mb-2" />
+                  <p className={`text-gray-400 ${isMobile ? 'text-sm' : ''}`}>
                     {isReconnecting ? 'Reconnecting...' : 'Waiting for peer...'}
                   </p>
                 </div>
@@ -255,58 +334,62 @@ const RoomPage: React.FC = () => {
         </div>
 
         {/* Controls */}
-        <div className="p-6 flex justify-center items-center space-x-4 bg-gradient-to-t from-black/80 to-transparent backdrop-blur-sm">
+        <div className={`flex justify-center items-center bg-gradient-to-t from-black/80 to-transparent backdrop-blur-sm ${isMobile ? 'p-4 space-x-6' : 'p-6 space-x-4'}`}>
           <button
             onClick={() => setMicActive(!micActive)}
-            className={`p-4 rounded-full transition-all duration-200 ${
+            className={`rounded-full transition-all duration-200 ${isMobile ? 'p-5' : 'p-4'} ${
               micActive 
                 ? 'bg-gray-700 hover:bg-gray-600 text-white' 
                 : 'bg-red-500 hover:bg-red-600 text-white'
             }`}
-            title={`${micActive ? 'Mute' : 'Unmute'} microphone (M)`}
+            title={`${micActive ? 'Mute' : 'Unmute'} microphone${!isMobile ? ' (M)' : ''}`}
           >
-            {micActive ? <Mic size={24} /> : <MicOff size={24} />}
+            {micActive ? <Mic size={isMobile ? 28 : 24} /> : <MicOff size={isMobile ? 28 : 24} />}
           </button>
 
           <button
             onClick={() => setVideoActive(!videoActive)}
-            className={`p-4 rounded-full transition-all duration-200 ${
+            className={`rounded-full transition-all duration-200 ${isMobile ? 'p-5' : 'p-4'} ${
               videoActive 
                 ? 'bg-gray-700 hover:bg-gray-600 text-white' 
                 : 'bg-red-500 hover:bg-red-600 text-white'
             }`}
-            title={`${videoActive ? 'Turn off' : 'Turn on'} camera (V)`}
+            title={`${videoActive ? 'Turn off' : 'Turn on'} camera${!isMobile ? ' (V)' : ''}`}
           >
-            {videoActive ? <Video size={24} /> : <VideoOff size={24} />}
+            {videoActive ? <Video size={isMobile ? 28 : 24} /> : <VideoOff size={isMobile ? 28 : 24} />}
           </button>
 
           <button 
             onClick={leaveRoom}
-            className="p-4 rounded-full bg-red-600 hover:bg-red-700 transition-colors text-white"
+            className={`rounded-full bg-red-600 hover:bg-red-700 transition-colors text-white ${isMobile ? 'p-5' : 'p-4'}`}
             title="Leave room"
           >
-            <Phone size={24} />
+            <Phone size={isMobile ? 28 : 24} />
           </button>
 
-          <button
-            onClick={toggleFullscreen}
-            className="p-4 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors text-white"
-            title="Toggle fullscreen (F)"
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M8 3H5C3.89543 3 3 3.89543 3 5V8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M21 8V5C21 3.89543 20.1046 3 19 3H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M16 21H19C20.1046 21 21 20.1046 21 19V16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M3 16V19C3 20.1046 3.89543 21 5 21H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
+          {!isMobile && (
+            <button
+              onClick={toggleFullscreen}
+              className="p-4 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors text-white"
+              title="Toggle fullscreen (F)"
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 3H5C3.89543 3 3 3.89543 3 5V8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M21 8V5C21 3.89543 20.1046 3 19 3H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M16 21H19C20.1046 21 21 20.1046 21 19V16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 16V19C3 20.1046 3.89543 21 5 21H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
         </div>
 
-        {/* Recording Controls */}
-        <div className="absolute bottom-24 left-4 flex flex-col space-y-2">
-          <RecordingAudioButton />
-          <RecordingVideoButton />
-        </div>
+        {/* Recording Controls - Hidden on mobile for better UX */}
+        {!isMobile && (
+          <div className="absolute bottom-24 left-4 flex flex-col space-y-2">
+            <RecordingAudioButton />
+            <RecordingVideoButton />
+          </div>
+        )}
 
         {/* Chat */}
         <ChatBox 
@@ -315,10 +398,22 @@ const RoomPage: React.FC = () => {
           dataChannelOpen={dataChannelOpen} 
         />
 
-        {/* Keyboard Shortcuts Help */}
-        <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 text-xs text-gray-500 text-center">
-          Press M to toggle mic • V for video • F for fullscreen
-        </div>
+        {/* Keyboard Shortcuts Help - Desktop only */}
+        {!isMobile && (
+          <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 text-xs text-gray-500 text-center">
+            Press M to toggle mic • V for video • F for fullscreen
+          </div>
+        )}
+
+        {/* Mobile connection indicator */}
+        {isMobile && (
+          <div className="absolute top-20 right-4 z-40">
+            <div className={`w-3 h-3 rounded-full ${
+              connectionState === 'connected' ? 'bg-green-400' : 
+              isReconnecting ? 'bg-yellow-400 animate-pulse' : 'bg-red-400'
+            }`} />
+          </div>
+        )}
       </div>
     </Layout>
   );

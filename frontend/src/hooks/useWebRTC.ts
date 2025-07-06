@@ -38,7 +38,10 @@ export function useWebRTC(
     // Host = impolite, Guest = polite
     const isPolite = !isHost;
 
-    // Enhanced ICE servers with multiple STUN/TURN servers
+    // Detect mobile device
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    // Enhanced ICE servers with mobile-optimized configuration
     const iceServers = [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
@@ -65,6 +68,98 @@ export function useWebRTC(
             wsSendBuffer.current.push(data);
         }
     }, []);
+
+    // Mobile-optimized media constraints
+    const getMobileOptimizedConstraints = useCallback(() => {
+        if (isMobile) {
+            return {
+                video: videoActive ? {
+                    width: { ideal: 640, max: 1280 },
+                    height: { ideal: 480, max: 720 },
+                    frameRate: { ideal: 15, max: 30 },
+                    facingMode: "user"
+                } : false,
+                audio: micActive ? {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                } : false
+            };
+        } else {
+            // Desktop constraints (unchanged)
+            return {
+                video: videoActive ? {
+                    width: { ideal: 1280, max: 1920 },
+                    height: { ideal: 720, max: 1080 },
+                    frameRate: { ideal: 30, max: 60 }
+                } : false,
+                audio: micActive ? {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                    sampleRate: 48000
+                } : false
+            };
+        }
+    }, [videoActive, micActive, isMobile]);
+
+    // Fallback constraints for mobile devices
+    const getFallbackConstraints = useCallback(() => {
+        if (isMobile) {
+            return {
+                video: videoActive ? {
+                    width: { ideal: 320, max: 640 },
+                    height: { ideal: 240, max: 480 },
+                    frameRate: { ideal: 15, max: 24 }
+                } : false,
+                audio: micActive
+            };
+        }
+        return {
+            video: videoActive,
+            audio: micActive
+        };
+    }, [videoActive, micActive, isMobile]);
+
+    // Enhanced getUserMedia with mobile fallbacks
+    const getUserMediaWithFallback = useCallback(async () => {
+        try {
+            console.log("[Media] Attempting to get user media with optimized constraints");
+            const constraints = getMobileOptimizedConstraints();
+            console.log("[Media] Using constraints:", constraints);
+            
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            console.log("[Media] Successfully acquired media stream");
+            return stream;
+        } catch (error) {
+            console.warn("[Media] Primary constraints failed, trying fallback:", error);
+            
+            try {
+                const fallbackConstraints = getFallbackConstraints();
+                console.log("[Media] Using fallback constraints:", fallbackConstraints);
+                
+                const stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                console.log("[Media] Successfully acquired media stream with fallback");
+                return stream;
+            } catch (fallbackError) {
+                console.error("[Media] Fallback also failed:", fallbackError);
+                
+                // Last resort: try basic constraints
+                try {
+                    console.log("[Media] Trying basic constraints as last resort");
+                    const basicStream = await navigator.mediaDevices.getUserMedia({
+                        video: videoActive,
+                        audio: micActive
+                    });
+                    console.log("[Media] Successfully acquired media stream with basic constraints");
+                    return basicStream;
+                } catch (basicError) {
+                    console.error("[Media] All getUserMedia attempts failed:", basicError);
+                    throw basicError;
+                }
+            }
+        }
+    }, [getMobileOptimizedConstraints, getFallbackConstraints, videoActive, micActive]);
 
     // Enhanced data channel setup with proper error handling
     const setupDataChannel = useCallback((dc: RTCDataChannel) => {
@@ -117,7 +212,7 @@ export function useWebRTC(
         return dc;
     }, []);
 
-    // Enhanced peer connection creation
+    // Enhanced peer connection creation with mobile optimizations
     const createPeer = useCallback(() => {
         if (peerRef.current) {
             console.log("[WebRTC] Peer connection already exists");
@@ -125,12 +220,19 @@ export function useWebRTC(
         }
 
         console.log("[WebRTC] Creating new peer connection");
-        const pc = new RTCPeerConnection({
+        
+        // Mobile-optimized peer connection configuration
+        const pcConfig = {
             iceServers,
-            iceCandidatePoolSize: 10,
-            bundlePolicy: 'max-bundle',
-            rtcpMuxPolicy: 'require'
-        });
+            iceCandidatePoolSize: isMobile ? 5 : 10,
+            bundlePolicy: 'max-bundle' as RTCBundlePolicy,
+            rtcpMuxPolicy: 'require' as RTCRtcpMuxPolicy,
+            ...(isMobile && {
+                iceTransportPolicy: 'all' as RTCIceTransportPolicy
+            })
+        };
+
+        const pc = new RTCPeerConnection(pcConfig);
 
         // Enhanced connection state monitoring
         pc.onconnectionstatechange = () => {
@@ -177,17 +279,22 @@ export function useWebRTC(
             };
         }
 
-        // Enhanced negotiation handling
+        // Enhanced negotiation handling with mobile considerations
         pc.onnegotiationneeded = async () => {
             try {
                 console.log("[WebRTC] Negotiation needed");
                 makingOfferRef.current = true;
                 
                 if (pc.signalingState === "stable") {
-                    const offer = await pc.createOffer({
+                    const offerOptions = {
                         offerToReceiveAudio: true,
-                        offerToReceiveVideo: true
-                    });
+                        offerToReceiveVideo: true,
+                        ...(isMobile && {
+                            voiceActivityDetection: false
+                        })
+                    };
+                    
+                    const offer = await pc.createOffer(offerOptions);
                     await pc.setLocalDescription(offer);
                     console.log("[WebRTC] Sending offer");
                     safeWSSend({ offer });
@@ -216,12 +323,19 @@ export function useWebRTC(
             });
             if (remoteVideoRef.current) {
                 remoteVideoRef.current.srcObject = remoteStream;
+                
+                // Mobile-specific: Ensure video plays
+                if (isMobile) {
+                    remoteVideoRef.current.play().catch(e => {
+                        console.warn("[Video] Auto-play failed, user interaction required:", e);
+                    });
+                }
             }
         };
 
         peerRef.current = pc;
         return pc;
-    }, [isHost, safeWSSend, remoteVideoRef, setupDataChannel]);
+    }, [isHost, safeWSSend, remoteVideoRef, setupDataChannel, isMobile]);
 
     // Enhanced WebSocket connection with retry logic
     const connectWebSocket = useCallback(() => {
@@ -314,7 +428,11 @@ export function useWebRTC(
                 }
 
                 if (pc.signalingState === "have-remote-offer") {
-                    const answer = await pc.createAnswer();
+                    const answerOptions = isMobile ? {
+                        voiceActivityDetection: false
+                    } : {};
+                    
+                    const answer = await pc.createAnswer(answerOptions);
                     await pc.setLocalDescription(answer);
                     console.log("[WebRTC] Sending answer");
                     safeWSSend({ answer });
@@ -344,17 +462,18 @@ export function useWebRTC(
         } catch (error) {
             console.error("[WebRTC] Error handling signaling message:", error);
         }
-    }, [isPolite, safeWSSend]);
+    }, [isPolite, safeWSSend, isMobile]);
 
     // Heartbeat mechanism to detect connection issues
     const startHeartbeat = useCallback(() => {
         stopHeartbeat();
+        const heartbeatInterval = isMobile ? 45000 : 30000; // Longer interval for mobile
         heartbeatIntervalRef.current = setInterval(() => {
             if (wsRef.current?.readyState === WebSocket.OPEN) {
                 safeWSSend({ type: 'ping' });
             }
-        }, 30000); // Send ping every 30 seconds
-    }, [safeWSSend]);
+        }, heartbeatInterval);
+    }, [safeWSSend, isMobile]);
 
     const stopHeartbeat = useCallback(() => {
         if (heartbeatIntervalRef.current) {
@@ -368,13 +487,14 @@ export function useWebRTC(
         if (isReconnecting) return;
         
         setIsReconnecting(true);
-        const delay = Math.min(1000 * Math.pow(2, Math.random()), 10000); // Max 10 seconds
+        const baseDelay = isMobile ? 2000 : 1000;
+        const delay = Math.min(baseDelay * Math.pow(2, Math.random()), 10000);
         
         reconnectTimeoutRef.current = setTimeout(() => {
             console.log("[WebSocket] Attempting reconnection...");
             connectWebSocket();
         }, delay);
-    }, [connectWebSocket, isReconnecting]);
+    }, [connectWebSocket, isReconnecting, isMobile]);
 
     // Connection failure handler with restart capability
     const handleConnectionFailure = useCallback(async () => {
@@ -393,7 +513,8 @@ export function useWebRTC(
         iceQueueRef.current = [];
         dataChannelRef.current = null;
 
-        // Restart connection after delay
+        // Restart connection after delay (longer for mobile)
+        const restartDelay = isMobile ? 3000 : 2000;
         setTimeout(async () => {
             try {
                 const newPeer = createPeer();
@@ -404,8 +525,8 @@ export function useWebRTC(
             } catch (error) {
                 console.error("[WebRTC] Restart failed:", error);
             }
-        }, 2000);
-    }, [createPeer, isPolite]);
+        }, restartDelay);
+    }, [createPeer, isPolite, isMobile]);
 
     // Peer disconnection handler
     const handlePeerDisconnection = useCallback(() => {
@@ -439,6 +560,7 @@ export function useWebRTC(
     const startStatsMonitoring = useCallback(() => {
         if (statsIntervalRef.current) return;
 
+        const statsInterval = isMobile ? 10000 : 5000; // Less frequent on mobile
         statsIntervalRef.current = setInterval(async () => {
             const pc = peerRef.current;
             if (!pc) return;
@@ -470,8 +592,8 @@ export function useWebRTC(
             } catch (error) {
                 console.error("[Stats] Error getting connection stats:", error);
             }
-        }, 5000);
-    }, []);
+        }, statsInterval);
+    }, [isMobile]);
 
     const stopStatsMonitoring = useCallback(() => {
         if (statsIntervalRef.current) {
@@ -480,7 +602,7 @@ export function useWebRTC(
         }
     }, []);
 
-    // Main effect
+    // Main effect with mobile optimizations
     useEffect(() => {
         if (!roomId || !userName) return;
 
@@ -488,28 +610,24 @@ export function useWebRTC(
 
         async function start() {
             try {
-                console.log("[Setup] Starting WebRTC setup");
+                console.log("[Setup] Starting WebRTC setup for", isMobile ? "mobile" : "desktop");
                 
-                // Get local media with enhanced constraints
-                localStream = await navigator.mediaDevices.getUserMedia({
-                    video: videoActive ? {
-                        width: { ideal: 1280, max: 1920 },
-                        height: { ideal: 720, max: 1080 },
-                        frameRate: { ideal: 30, max: 60 }
-                    } : false,
-                    audio: micActive ? {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true,
-                        sampleRate: 48000
-                    } : false
-                });
+                // Get local media with mobile-optimized constraints and fallbacks
+                localStream = await getUserMediaWithFallback();
 
                 if (localVideoRef.current) {
                     localVideoRef.current.srcObject = localStream;
+                    
+                    // Mobile-specific: Ensure local video plays
+                    if (isMobile) {
+                        localVideoRef.current.muted = true; // Ensure muted for autoplay
+                        localVideoRef.current.play().catch(e => {
+                            console.warn("[Video] Local video auto-play failed:", e);
+                        });
+                    }
                 }
                 localStreamRef.current = localStream;
-                console.log("[Setup] Local media acquired");
+                console.log("[Setup] Local media acquired successfully");
 
                 // Create peer connection first
                 const peer = createPeer();
@@ -517,12 +635,29 @@ export function useWebRTC(
                 // Add tracks to peer connection
                 await addTracksIfNeeded(peer);
                 
-                // Connect WebSocket after peer is ready
-                connectWebSocket();
+                // Connect WebSocket after peer is ready (with delay for mobile)
+                if (isMobile) {
+                    setTimeout(() => connectWebSocket(), 500);
+                } else {
+                    connectWebSocket();
+                }
 
             } catch (error) {
                 console.error("[Setup] Error:", error);
-                alert('Unable to access camera/microphone. Please check permissions.');
+                
+                // More specific error messages for mobile
+                let errorMessage = 'Unable to access camera/microphone. ';
+                if (isMobile) {
+                    errorMessage += 'Please ensure:\n' +
+                        '• Camera/microphone permissions are granted\n' +
+                        '• No other apps are using the camera\n' +
+                        '• You\'re using HTTPS or localhost\n' +
+                        '• Try refreshing the page';
+                } else {
+                    errorMessage += 'Please check permissions and try again.';
+                }
+                
+                alert(errorMessage);
             }
         }
 
@@ -560,9 +695,9 @@ export function useWebRTC(
             setIceConnectionState('new');
             setIsReconnecting(false);
         };
-    }, [roomId, userName, localVideoRef, connectWebSocket, createPeer, addTracksIfNeeded, stopHeartbeat, stopStatsMonitoring]);
+    }, [roomId, userName, localVideoRef, connectWebSocket, createPeer, addTracksIfNeeded, stopHeartbeat, stopStatsMonitoring, getUserMediaWithFallback, isMobile]);
 
-    // Track state changes effect
+    // Track state changes effect with mobile considerations
     useEffect(() => {
         if (!localStreamRef.current) return;
 
@@ -573,7 +708,16 @@ export function useWebRTC(
         localStreamRef.current.getVideoTracks().forEach(track => {
             track.enabled = videoActive;
         });
-    }, [micActive, videoActive]);
+
+        // Mobile-specific: Handle video element visibility
+        if (isMobile && localVideoRef.current) {
+            if (videoActive) {
+                localVideoRef.current.style.display = 'block';
+            } else {
+                localVideoRef.current.style.display = 'none';
+            }
+        }
+    }, [micActive, videoActive, isMobile, localVideoRef]);
 
     // Send chat message with enhanced error handling
     const sendMessage = useCallback((msg: string) => {
