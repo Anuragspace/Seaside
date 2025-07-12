@@ -4,7 +4,7 @@ import Hero from '../components/Hero';
 
 const HomePage: React.FC = () => {
   return (
-    <Layout showNavbar={true}>
+    <Layout showNavbar={false}>
       <Hero />
     </Layout>
   );

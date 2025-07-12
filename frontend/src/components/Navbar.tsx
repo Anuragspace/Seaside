@@ -14,11 +14,11 @@ const Navbar: React.FC<NavbarProps> = () => {
   const { isDay } = useTimeOfDay();
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent backdrop-blur-sm">
+    <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex justify-between items-center bg-transparent backdrop-blur-sm">
       <Link to="/" className="text-2xl font-bold tracking-tight text-white">
         SeaSide
       </Link>
-      
+
       <div className="flex items-center">
         <div className="flex items-center px-4 py-2 rounded-full bg-gray-800/40 backdrop-blur-md">
           {isDay ? (
