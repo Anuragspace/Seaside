@@ -8,7 +8,7 @@ import './index.css';
 
 if (!PUBLISHABLE_KEY) {
   throw new Error('Missing Publishable Key')
-} */  
+}
 
 createRoot(document.getElementById('root')!).render(
   <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
