@@ -6,6 +6,8 @@ import (
 	"github.com/gofiber/websocket/v2"
 )
 
+var sharedChatManager = NewChatManager()
+
 // client connects to the chat endpoint
 func ChatWebSocketHandler(c *websocket.Conn) {
 	roomId := c.Query("roomID")
@@ -18,13 +20,13 @@ func ChatWebSocketHandler(c *websocket.Conn) {
 	}
 
 	if userId == "" {
-		userId = "null_admi"
+		userId = "null_admin"
 	}
 
 	log.Printf("[Chat] New chat connection for room: %s, user: %s", roomId, userId)
 
 	// create a new client
-	client := NewChatClient(userId, roomId, c, NewChatManager())
+	client := NewChatClient(userId, roomId, c, sharedChatManager)
 
 	// start the connection
 	client.HandleConnection()
@@ -32,5 +34,5 @@ func ChatWebSocketHandler(c *websocket.Conn) {
 
 // get the statistics for the chat features that has been implemented
 func GetChatStats() map[string]interface{} {
-	return NewChatManager().GetRoomStats()
+	return sharedChatManager.GetRoomStats()
 }

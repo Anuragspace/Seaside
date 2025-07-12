@@ -82,11 +82,11 @@ func (cc *chatClient) handleIncomingMessage(message []byte) {
 	}
 
 	if msgType == "chat" {
-		text, ok := msgData["type"].(string)
+		text, ok := msgData["text"].(string)
 		if ok && text == "clear" {
 			clearMsg := ChatMessage{
 				Type:      "system",
-				Text:      "",
+				Text:      "Chat cleared",
 				From:      "system",
 				Timestamp: time.Now(),
 				RoomID:    cc.RoomId,
@@ -124,8 +124,8 @@ func (cc *chatClient) handleChatMessage(msgData map[string]interface{}) {
 		RoomID:    cc.RoomId,
 	}
 
-	// broadcast the message to everyone
-	cc.Manager.BroadcastMessage(cc.RoomId, chatMsg)
+	// broadcast the message to everyone (including sender)
+	cc.Manager.broadcastToRoom(cc.RoomId, chatMsg, nil)
 
 	log.Printf("[Chat] %s: %s ::: %s", cc.Username, text, time.Now())
 }

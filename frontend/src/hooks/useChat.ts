@@ -28,6 +28,9 @@ export function useChat(roomId: string, userName: string) {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
+  
+  // Generate a unique username to prevent conflicts
+  const uniqueUserName = useRef<string>(`${userName}_${Math.random().toString(36).substr(2, 6)}`);
 
   const connectChat = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -37,46 +40,60 @@ export function useChat(roomId: string, userName: string) {
       ? "wss://seaside-backend-pw1v.onrender.com"
       : `${wsProtocol}://${window.location.hostname}:8080`;
 
-    const ws = new WebSocket(`${wsBase}/chat?roomID=${roomId}&username=${encodeURIComponent(userName)}`);
+    const wsUrl = `${wsBase}/chat?roomID=${roomId}&username=${encodeURIComponent(uniqueUserName.current)}`;
+    console.log("[Chat] Connecting to WebSocket:", wsUrl);
+    console.log("[Chat] Using unique username:", uniqueUserName.current);
+    
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      console.log("[Chat] WebSocket connected successfully");
       setChatStats(prev => ({ ...prev, isConnected: true }));
     };
 
     ws.onmessage = (event) => {
+      console.log("[Chat] Received message:", event.data);
       try {
         const data = JSON.parse(event.data);
         handleMessage(data);
       } catch (error) {
-        console.error("Error parsing message:", error);
+        console.error("[Chat] Error parsing message:", error);
       }
     };
 
     ws.onclose = (event) => {
+      console.log("[Chat] WebSocket closed:", event.code, event.reason);
       setChatStats(prev => ({ ...prev, isConnected: false }));
       
       // Auto-reconnect (simple version)
       if (event.code !== 1000) {
+        console.log("[Chat] Attempting to reconnect in 3 seconds...");
         reconnectTimeoutRef.current = setTimeout(connectChat, 3000);
       }
     };
 
     ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
+      console.error("[Chat] WebSocket error:", error);
     };
   }, [roomId, userName]);
 
   const handleMessage = useCallback((data: any) => {
+    console.log("[Chat] Processing message:", data);
+    
     const messageId = data.id || `${Date.now()}-${Math.random()}`;
     
     // Simple duplicate prevention
-    if (messageIdsRef.current.has(messageId)) return;
+    if (messageIdsRef.current.has(messageId)) {
+      console.log("[Chat] Duplicate message ignored:", messageId);
+      return;
+    }
     messageIdsRef.current.add(messageId);
 
     if (data.type === 'typing') {
+      console.log("[Chat] Handling typing message:", data);
       // Simple typing indicators
-      if (data.isTyping && data.from !== userName) {
+      if (data.text && data.from !== uniqueUserName.current) {
         setIsTyping(prev => [...prev.filter(p => p !== data.from), data.from]);
         setTimeout(() => {
           setIsTyping(prev => prev.filter(p => p !== data.from));
@@ -87,15 +104,29 @@ export function useChat(roomId: string, userName: string) {
       return;
     }
 
+    // Handle system messages (like clear)
+    if (data.type === 'system') {
+      console.log("[Chat] Handling system message:", data);
+      if (data.text === 'Chat cleared') {
+        console.log("[Chat] Clearing messages");
+        setMessages([]);
+        messageIdsRef.current.clear();
+        setChatStats(prev => ({ ...prev, totalMessages: 0 }));
+        return;
+      }
+    }
+
     const message: ChatMessage = {
       id: messageId,
       text: data.text || "",
       from: data.from || "system",
-      fromMe: data.from === userName,
+      fromMe: data.from === uniqueUserName.current,
       timestamp: new Date(data.timestamp || Date.now()),
       type: data.type || "chat",
     };
 
+    console.log("[Chat] Adding message to state:", message);
+    console.log("[Chat] Current userName:", userName, "Unique userName:", uniqueUserName.current, "Message from:", data.from, "fromMe:", data.from === uniqueUserName.current);
     setMessages(prev => [...prev, message]);
     setChatStats(prev => ({ ...prev, totalMessages: prev.totalMessages + 1 }));
 
@@ -116,25 +147,20 @@ export function useChat(roomId: string, userName: string) {
   }, [userName]);
 
   const sendMessage = useCallback((text: string) => {
-    if (!text.trim() || wsRef.current?.readyState !== WebSocket.OPEN) return;
+    if (!text.trim() || wsRef.current?.readyState !== WebSocket.OPEN) {
+      console.warn("[Chat] Cannot send message - WebSocket not ready. State:", wsRef.current?.readyState);
+      return;
+    }
 
-    const message: ChatMessage = {
-      id: `${Date.now()}-${Math.random()}`,
-      text: text.trim(),
-      from: userName,
-      fromMe: true,
-      timestamp: new Date(),
-      type: "chat",
-    };
-
-    setMessages(prev => [...prev, message]);
-    setChatStats(prev => ({ ...prev, totalMessages: prev.totalMessages + 1 }));
-
-    wsRef.current.send(JSON.stringify({
+    console.log("[Chat] Sending message:", text);
+    
+    const messageData = JSON.stringify({
       type: "chat",
       text: text.trim(),
-    }));
-  }, [userName]);
+    });
+    console.log("[Chat] Sending to WebSocket:", messageData);
+    wsRef.current.send(messageData);
+  }, []);
 
   // Simple typing indicator
   const handleTyping = useCallback(() => {
@@ -151,9 +177,15 @@ export function useChat(roomId: string, userName: string) {
   }, []);
 
   const clearMessages = useCallback(() => {
-    setMessages([]);
-    setChatStats(prev => ({ ...prev, totalMessages: 0 }));
-    messageIdsRef.current.clear();
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log("[Chat] Sending clear command");
+      wsRef.current.send(JSON.stringify({ type: "chat", text: "clear" }));
+    } else {
+      console.log("[Chat] Clearing messages locally");
+      setMessages([]);
+      setChatStats(prev => ({ ...prev, totalMessages: 0 }));
+      messageIdsRef.current.clear();
+    }
   }, []);
 
   useEffect(() => {
