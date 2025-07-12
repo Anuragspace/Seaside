@@ -4,17 +4,19 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"seaside/internals/chat"
 	"seaside/internals/middleware"
 	"seaside/internals/video"
 
+	"time"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/etag"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/websocket/v2"
 	"github.com/joho/godotenv"
-	"time"
 )
 
 func setupRoutes(app *fiber.App) {
@@ -23,8 +25,8 @@ func setupRoutes(app *fiber.App) {
 	// Health check route
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
-			"status": "ok",
-			"message": "✅ Backend is up and running! Go back to https://seasides.vercel.app/ and Create Room ID",
+			"status":    "ok",
+			"message":   "✅ Backend is up and running! Go back to https://seasides.vercel.app/ and Create Room ID",
 			"timestamp": time.Now().Unix(),
 		})
 	})
@@ -68,16 +70,41 @@ func setupRoutes(app *fiber.App) {
 		return fiber.ErrUpgradeRequired
 	})
 
+	app.Use("/chat", func(c *fiber.Ctx) error {
+		// validate the room id
+		roomId := c.Query("roomID")
+		if roomId == "" || len(roomId) < 6 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "invalid room id",
+			})
+		}
+
+		if websocket.IsWebSocketUpgrade(c) {
+			c.Locals("Allowed", true)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
+
 	// Create room endpoint
 	app.Get("/create-room", video.CreateRoomRequestHandler)
 
 	// Join room WebSocket endpoint
 	app.Get("/join-room", websocket.New(video.WebSocketJoinHandler, websocket.Config{
 		// Enhanced WebSocket configuration
+		Origins:           []string{"*"},
+		ReadBufferSize:    1024,
+		WriteBufferSize:   1024,
+		EnableCompression: true,
+	}))
+
+	// Chat WebSocket endpoint
+	app.Get("/chat", websocket.New(chat.ChatWebSocketHandler, websocket.Config{
+		// Enhanced WebSocket configuration
 		Origins:         []string{"*"},
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		
+
 		EnableCompression: true,
 	}))
 }

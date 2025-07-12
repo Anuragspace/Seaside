@@ -25,9 +25,9 @@ export function useWebRTC(
     const ignoreOfferRef = useRef(false);
     const dataChannelRef = useRef<RTCDataChannel | null>(null);
     const onMessageRef = useRef<((msg: string) => void) | undefined>();
-    const reconnectTimeoutRef = useRef<number | null>(null);
-    const heartbeatIntervalRef = useRef<number | null>(null);
-    const statsIntervalRef = useRef<number | null>(null);
+    const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const initialSetupRef = useRef(false);
     
     const [dataChannelOpen, setDataChannelOpen] = useState(false);

@@ -1,13 +1,26 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ChatMessage, ChatStats } from "../hooks/useChat";
 
 interface ChatBoxProps {
   onSend: (msg: string) => void;
-  messages: { text: string; fromMe: boolean; id: number }[];
+  onTyping: () => void;
+  messages: ChatMessage[];
+  isTyping: string[];
+  chatStats: ChatStats;
+  isConnected: boolean;
   dataChannelOpen?: boolean;
 }
 
-const ChatBox: React.FC<ChatBoxProps> = ({ onSend, messages, dataChannelOpen }) => {
+const ChatBox: React.FC<ChatBoxProps> = ({ 
+  onSend, 
+  onTyping,
+  messages, 
+  isTyping,
+  chatStats,
+  isConnected,
+  dataChannelOpen 
+}) => {
   const [input, setInput] = useState("");
   const [isMinimized, setIsMinimized] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -15,13 +28,18 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSend, messages, dataChannelOpen }) 
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    if (input.trim() && dataChannelOpen) {
+    if (input.trim() && (dataChannelOpen || isConnected)) {
       console.log("[ChatBox] Sending message:", input.trim());
       onSend(input.trim());
       setInput("");
-    } else if (!dataChannelOpen) {
-      console.warn("[ChatBox] Cannot send message - data channel not open");
+    } else if (!dataChannelOpen && !isConnected) {
+      console.warn("[ChatBox] Cannot send message - no connection available");
     }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(e.target.value);
+    onTyping(); // Trigger typing indicator
   };
 
   // Auto-scroll to bottom when new messages arrive
@@ -29,24 +47,35 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSend, messages, dataChannelOpen }) 
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Focus input when data channel opens
+  // Focus input when connection opens
   useEffect(() => {
-    if (dataChannelOpen && !isMinimized) {
+    if ((dataChannelOpen || isConnected) && !isMinimized) {
       inputRef.current?.focus();
     }
-  }, [dataChannelOpen, isMinimized]);
+  }, [dataChannelOpen, isConnected, isMinimized]);
 
-  // Show only the last 10 messages
-  const visibleMessages = messages.slice(-10);
+  // Show only the last 15 messages for better performance
+  const visibleMessages = messages.slice(-15);
 
   const getConnectionStatusText = () => {
-    if (dataChannelOpen) return "Chat connected";
-    return "Chat connecting...";
+    if (dataChannelOpen) return "WebRTC Chat";
+    if (isConnected) return "WebSocket Chat";
+    return "Connecting...";
   };
 
   const getConnectionStatusColor = () => {
-    if (dataChannelOpen) return "text-green-400";
+    if (dataChannelOpen || isConnected) return "text-green-400";
     return "text-yellow-400";
+  };
+
+  const getConnectionStatusDot = () => {
+    if (dataChannelOpen || isConnected) return 'bg-green-400';
+    return 'bg-yellow-400';
+  };
+
+  // Format timestamp for display
+  const formatTime = (timestamp: Date) => {
+    return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -59,10 +88,15 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSend, messages, dataChannelOpen }) 
         {/* Chat Header */}
         <div className="flex items-center justify-between p-3 border-b border-gray-700">
           <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${dataChannelOpen ? 'bg-green-400' : 'bg-yellow-400'} animate-pulse`} />
-            <span className={`text-sm font-medium ${getConnectionStatusColor()}`}>
-              {getConnectionStatusText()}
-            </span>
+            <div className={`w-2 h-2 rounded-full ${getConnectionStatusDot()} animate-pulse`} />
+            <div className="flex flex-col">
+              <span className={`text-sm font-medium ${getConnectionStatusColor()}`}>
+                {getConnectionStatusText()}
+              </span>
+              <span className="text-xs text-gray-400">
+                {chatStats.participants.length} participant{chatStats.participants.length !== 1 ? 's' : ''}
+              </span>
+            </div>
           </div>
           <button
             onClick={() => setIsMinimized(!isMinimized)}
@@ -99,7 +133,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSend, messages, dataChannelOpen }) 
                 <AnimatePresence initial={false}>
                   {visibleMessages.length === 0 ? (
                     <div className="text-center text-gray-500 text-sm py-4">
-                      {dataChannelOpen ? "No messages yet. Start the conversation!" : "Waiting for connection..."}
+                      {(dataChannelOpen || isConnected) ? "No messages yet. Start the conversation!" : "Waiting for connection..."}
                     </div>
                   ) : (
                     visibleMessages.map((msg) => (
@@ -111,17 +145,42 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSend, messages, dataChannelOpen }) 
                         transition={{ duration: 0.2 }}
                         className={`flex ${msg.fromMe ? 'justify-end' : 'justify-start'}`}
                       >
-                        <div
-                          className={`max-w-[80%] px-3 py-2 rounded-lg text-sm break-words ${
-                            msg.fromMe
-                              ? "bg-blue-600 text-white rounded-br-sm"
-                              : "bg-gray-700 text-gray-100 rounded-bl-sm"
-                          }`}
-                        >
-                          {msg.text}
+                        <div className={`max-w-[80%] ${msg.fromMe ? 'items-end' : 'items-start'}`}>
+                          {/* Message bubble */}
+                          <div
+                            className={`px-3 py-2 rounded-lg text-sm break-words ${
+                              msg.type === 'system'
+                                ? "bg-gray-800 text-gray-300 text-center italic"
+                                : msg.fromMe
+                                ? "bg-blue-600 text-white rounded-br-sm"
+                                : "bg-gray-700 text-gray-100 rounded-bl-sm"
+                            }`}
+                          >
+                            {msg.text}
+                          </div>
+                          
+                          {/* Message metadata */}
+                          {msg.type === 'chat' && (
+                            <div className={`text-xs text-gray-500 mt-1 ${msg.fromMe ? 'text-right' : 'text-left'}`}>
+                              {msg.fromMe ? 'You' : msg.from} • {formatTime(msg.timestamp)}
+                            </div>
+                          )}
                         </div>
                       </motion.div>
                     ))
+                  )}
+                  
+                  {/* Typing indicators */}
+                  {isTyping.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex justify-start"
+                    >
+                      <div className="bg-gray-700 text-gray-300 px-3 py-2 rounded-lg text-sm italic">
+                        {isTyping.join(', ')} {isTyping.length === 1 ? 'is' : 'are'} typing...
+                      </div>
+                    </motion.div>
                   )}
                 </AnimatePresence>
                 <div ref={messagesEndRef} />
@@ -135,23 +194,23 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSend, messages, dataChannelOpen }) 
                     type="text"
                     className="flex-1 px-3 py-3 bg-transparent text-white placeholder-gray-400 outline-none"
                     placeholder={
-                      dataChannelOpen 
+                      (dataChannelOpen || isConnected)
                         ? "Type a message..." 
                         : "Waiting for connection..."
                     }
                     value={input}
-                    onChange={(e) => setInput(e.target.value)}
+                    onChange={handleInputChange}
                     maxLength={500}
-                    disabled={!dataChannelOpen}
+                    disabled={!dataChannelOpen && !isConnected}
                   />
                   <button
                     type="submit"
                     className={`px-4 py-3 font-semibold transition-colors ${
-                      dataChannelOpen && input.trim()
+                      (dataChannelOpen || isConnected) && input.trim()
                         ? "bg-blue-600 hover:bg-blue-700 text-white"
                         : "bg-gray-600 text-gray-400 cursor-not-allowed"
                     }`}
-                    disabled={!dataChannelOpen || !input.trim()}
+                    disabled={!dataChannelOpen && !isConnected || !input.trim()}
                   >
                     Send
                   </button>
@@ -165,8 +224,10 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSend, messages, dataChannelOpen }) 
       {/* Debug Info (only in development) */}
       {import.meta.env.DEV && (
         <div className="mt-2 p-2 bg-gray-800/90 rounded text-xs text-gray-400">
-          <div>Data Channel: {dataChannelOpen ? "Open" : "Closed"}</div>
+          <div>WebRTC: {dataChannelOpen ? "Open" : "Closed"}</div>
+          <div>WebSocket: {isConnected ? "Connected" : "Disconnected"}</div>
           <div>Messages: {messages.length}</div>
+          <div>Participants: {chatStats.participants.length}</div>
         </div>
       )}
     </div>

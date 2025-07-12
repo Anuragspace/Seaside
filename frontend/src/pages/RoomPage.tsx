@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Mic, MicOff, Video, VideoOff, Phone, Users, MessageSquare, Share2, Settings } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useWebRTC } from '../hooks/useWebRTC';
+import { useChat } from '../hooks/useChat';
 import ChatBox from '../components/ChatBox';
 import ConnectionStatus from '../components/ConnectionStatus';
 import { setupAudio, startRecording, stopRecording } from '../hooks/audioRecord';
@@ -20,7 +21,6 @@ const RoomPage: React.FC = () => {
 
   const [micActive, setMicActive] = useState(true);
   const [videoActive, setVideoActive] = useState(true);
-  const [messages, setMessages] = useState<{ text: string; fromMe: boolean; id: number }[]>([]);
   const [showStats, setShowStats] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -34,7 +34,7 @@ const RoomPage: React.FC = () => {
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
   const { 
-    sendMessage, 
+    sendMessage: sendWebRTCMessage, 
     onMessage, 
     dataChannelOpen,
     connectionState,
@@ -50,6 +50,21 @@ const RoomPage: React.FC = () => {
     micActive,
     videoActive,
     isHost
+  );
+
+  // Enhanced chat hook for WebSocket-based chat
+  const {
+    messages,
+    isTyping,
+    chatStats,
+    isConnected: chatConnected,
+    sendMessage: sendChatMessage,
+    handleTyping,
+    clearMessages,
+    connectChat,
+  } = useChat(
+    roomId!,
+    userName
   );
 
   useEffect(() => {
@@ -152,29 +167,24 @@ const RoomPage: React.FC = () => {
     return () => window.removeEventListener('orientationchange', handleOrientationChange);
   }, [isMobile]);
 
-  // Send chat to peer
+  // Send chat message via WebSocket
   const handleSend = (msg: string) => {
-    if (dataChannelOpen) {
-      sendMessage(msg);
-      setMessages((prev) => [
-        ...prev,
-        { text: msg, fromMe: true, id: Date.now() },
-      ]);
+    if (chatConnected) {
+      sendChatMessage(msg);
+    } else {
+      console.warn("[Chat] WebSocket not connected, cannot send message");
     }
   };
 
-  // Listen for incoming messages from peer
-  useEffect(() => {
-    if (!onMessage) return;
-    const handler = (msg: string) => {
-      setMessages((prev) => [
-        ...prev,
-        { text: msg, fromMe: false, id: Date.now() },
-      ]);
-    };
-    onMessage(handler);
-    return () => onMessage(undefined);
-  }, [onMessage]);
+  // Remove the old WebRTC message handling since we're using WebSocket chat now
+  // useEffect(() => {
+  //   if (!onMessage) return;
+  //   const handler = (msg: string) => {
+  //     // The useChat hook will manage the messages state
+  //   };
+  //   onMessage(handler);
+  //   return () => onMessage(undefined);
+  // }, [onMessage]);
 
   // Copy room ID to clipboard
   const copyRoomId = async () => {
@@ -394,7 +404,11 @@ const RoomPage: React.FC = () => {
         {/* Chat */}
         <ChatBox 
           onSend={handleSend} 
+          onTyping={handleTyping}
           messages={messages} 
+          isTyping={isTyping}
+          chatStats={chatStats}
+          isConnected={chatConnected}
           dataChannelOpen={dataChannelOpen} 
         />
 
@@ -428,7 +442,7 @@ const RecordingAudioButton: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    let timer: number;
+    let timer: ReturnType<typeof setTimeout>;
     if (countdown !== null && countdown > 0) {
       timer = setTimeout(() => setCountdown(countdown - 1), 1000);
     } else if (countdown === 0) {
@@ -493,7 +507,7 @@ const RecordingVideoButton: React.FC = () => {
   const [recordingVideo, setRecordingVideo] = useState(false);
   const [countdownVideo, setCountdownVideo] = useState<number | null>(null);
   const [timer, setTimer] = useState('00:00');
-  const timerRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const secondsRef = useRef(0);
 
   useEffect(() => {
@@ -501,7 +515,7 @@ const RecordingVideoButton: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    let interval: number;
+    let interval: ReturnType<typeof setTimeout>;
     if (countdownVideo !== null && countdownVideo > 0) {
       interval = setTimeout(() => setCountdownVideo(countdownVideo - 1), 1000);
     } else if (countdownVideo === 0) {
