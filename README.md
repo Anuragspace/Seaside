@@ -10,16 +10,14 @@ A modern podcast platform with cloud support, real-time video chat, and seamless
 
 **Seaside** is an open-source podcasting platform that allows users to create, join, and record podcasts with live video chat and cloud-based storage. Leveraging WebRTC for real-time communication and cloud technologies for scalability, Seaside is built for the modern creator and their audience.
 
-### Landing Page
-![image](https://github.com/user-attachments/assets/361d5b99-3017-443a-a3b8-9aae8de797ad)
-
-
 ---
 
 ## 🌐 Live Project
 
 - **Frontend:** [https://seasides.vercel.app/](https://seasides.vercel.app/)
 - **Backend:** [https://seaside-backend-pw1v.onrender.com](https://seaside-backend-pw1v.onrender.com)
+### Landing Page
+![image](https://github.com/user-attachments/assets/361d5b99-3017-443a-a3b8-9aae8de797ad)
 ---
 
 ## 🛠️ Tech Stack
