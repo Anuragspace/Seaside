@@ -5,9 +5,10 @@ import { X } from 'lucide-react';
 interface CreateRoomModalProps {
   onClose: () => void;
   onCreateRoom: (roomId: string, userName: string, isHost: boolean) => void;
+  onError: () => void;
 }
 
-const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom }) => {
+const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom, onError }) => {
   const [roomId, setRoomId] = useState('');
   const [userName, setUserName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -15,21 +16,36 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const fetchRoomId = async () => {
-      try {
-        const backendBase =
-          import.meta.env.PROD
-            ? 'https://seaside-backend-pw1v.onrender.com'
-            : '';
+  const fetchRoomId = async () => {
+    try {
+      const backendBase = import.meta.env.PROD
+        ? 'https://seaside-backend-pw1v.onrender.com'
+        : '';
 
-        const response = await fetch(`${backendBase}/create-room`);
-        const data = await response.json();
-        setRoomId(data.roomID || '');
-      } catch (err) {
-        setError('Failed to generate room. Try again.');
+      const response = await fetch(`${backendBase}/create-room`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch room ID');
       }
-    };
-    fetchRoomId();
+      
+      const data = await response.json();
+      
+      if (!data.roomID) {
+        throw new Error('No room ID received');
+      }
+      
+      setRoomId(data.roomID);
+    } catch (err) {
+      console.error('Error creating room:', err);
+      setError('Failed to generate room. Try again.');
+      if (onError) {
+        console.log('Calling onError callback');
+        onError(); // This should trigger the notification
+      }
+    }
+  };
+  
+  fetchRoomId();
 
     const handleEsc = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -39,7 +55,7 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom
     return () => {
       window.removeEventListener('keydown', handleEsc);
     };
-  }, [onClose]);
+  },[onClose, onError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

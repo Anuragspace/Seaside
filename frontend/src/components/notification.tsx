@@ -3,14 +3,26 @@ import { motion, AnimatePresence } from "framer-motion";
 import { SiRender } from "react-icons/si";
 import { X } from "lucide-react";
 
-const Notification: React.FC = () => {
-  const [show, setShow] = useState(false);
+interface NotificationProps {
+  show: boolean;
+  onClose: () => void;
+}
 
+
+
+const Notification: React.FC<NotificationProps> = ({ show, onClose }) => {
   useEffect(() => {
-    const timer = setTimeout(() => setShow(true), 2000);
-    return () => clearTimeout(timer);
-  }, []);
-
+    let timer: number;
+    if (show) {
+      timer = window.setTimeout(() => {
+        onClose();
+      }, 2000);
+    }
+    return () => {
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [show, onClose]);
+  
   return (
     <AnimatePresence>
       {show && (
@@ -43,7 +55,7 @@ const Notification: React.FC = () => {
             </a>
           </span>
           <button
-            onClick={() => setShow(false)}
+            onClick={onClose}
             className="p-1 rounded-full hover:bg-gray-700/60 transition-colors"
             aria-label="Close notification"
           >

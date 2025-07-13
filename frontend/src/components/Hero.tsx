@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; 
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import CreateRoomModal from './modals/CreateRoomModal';
@@ -12,6 +12,7 @@ import Navbar from './Navbar';
 const Hero: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+  const [showNotification, setShowNotification] = useState(false); // Add this state
   const navigate = useNavigate();
 
   // Now expects (roomId: string, userName: string)
@@ -23,10 +24,14 @@ const Hero: React.FC = () => {
     navigate(`/room/${roomId}?user=${encodeURIComponent(userName)}`);
   };
 
+  // Debug effect
+  useEffect(() => {
+    console.log('Notification state changed:', showNotification);
+  }, [showNotification]);
 
   return (
     <div
-      className="pt-2 w-full min-h-screen flex flex-col items-center justify-center px-4 mt-0 relative"
+      className="w-full min-h-screen flex flex-col items-center jjustify-start px-4 lg:pt-52 pt-48 relative"
       style={{
         backgroundImage: `url(${light})`,
         backgroundRepeat: 'no-repeat',
@@ -73,6 +78,7 @@ const Hero: React.FC = () => {
         <CreateRoomModal
           onClose={() => setIsCreateModalOpen(false)}
           onCreateRoom={handleCreateRoom}
+          onError={() => setShowNotification(true)} 
         />
       )}
       {isJoinModalOpen && (
@@ -81,7 +87,10 @@ const Hero: React.FC = () => {
           onJoinRoom={handleJoinRoom}
         />
       )}
-      <Notification />
+      <Notification 
+        show={showNotification} 
+        onClose={() => setShowNotification(false)} 
+      />
     </div>
 
   );

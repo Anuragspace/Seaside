@@ -8,6 +8,7 @@ import ChatBox from '../components/ChatBox';
 import ConnectionStatus from '../components/ConnectionStatus';
 import { setupAudio, startRecording, stopRecording } from '../hooks/audioRecord';
 import { setupVideo, startVideoRecording, stopVideoRecording } from '../hooks/videoRecord';
+import light from '../assets/light.png';
 
 function useQuery() {
   return new URLSearchParams(useLocation().search);
@@ -105,6 +106,7 @@ const RoomPage: React.FC = () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [roomId, navigate, isMobile]);
+  
 
   // Handle fullscreen toggle
   const toggleFullscreen = () => {
@@ -224,7 +226,20 @@ const RoomPage: React.FC = () => {
 
   return (
     <Layout showNavbar={false}>
-      <div className={`w-full h-screen bg-black text-white flex flex-col relative ${isMobile ? 'touch-manipulation' : ''}`}>
+      <div
+      className="fixed inset-0 w-full h-full z-0"
+      style={{
+        backgroundImage: `url(${light})`,
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'center bottom',
+        backgroundSize: '1000px 950px',
+        opacity: 1 // Added opacity to make it subtle
+      }}
+      
+    />
+    
+      
+      <div className={`w-full h-screen bg-black/60  text-white flex flex-col relative ${isMobile ? 'touch-manipulation' : ''}z-10`}>
         {/* Header */}
         <div className={`p-4 flex items-center bg-gradient-to-b from-black/80 to-transparent backdrop-blur-sm relative z-30 ${isMobile ? 'p-2' : ''}`}>
           <button
