@@ -8,6 +8,7 @@ let chunks: BlobPart[] = [];
 let timeInterval: ReturnType<typeof setInterval> | null = null;
 let secondsElapsed = 0;
 let minutesElapsed = 0;
+let sessionCheckInterval: ReturnType<typeof setInterval> | null = null;
 
 let isRecording = false;
 
@@ -88,6 +89,7 @@ export function startVideoRecording() {
                 }
                 updateTimerDisplay();
             }, 1000);
+            startSessionMonitoring();
             if (recordButton) recordButton.textContent = 'Stop Recording';
         } catch (err) {
             console.error('Error starting video recording:', err);
@@ -104,11 +106,79 @@ export function stopVideoRecording() {
                 clearInterval(timeInterval);
                 timeInterval = null;
             }
+            stopSessionMonitoring();
             if (recordButton) recordButton.textContent = 'Start Recording';
         } catch (err) {
             console.error('Error stopping video recording:', err);
         }
     }
+}
+
+// Session monitoring for authentication during recording
+function startSessionMonitoring(): void {
+    // Check session every 30 seconds during recording
+    sessionCheckInterval = setInterval(() => {
+        checkSessionDuringRecording();
+    }, 30000);
+}
+
+function stopSessionMonitoring(): void {
+    if (sessionCheckInterval) {
+        clearInterval(sessionCheckInterval);
+        sessionCheckInterval = null;
+    }
+}
+
+async function checkSessionDuringRecording(): Promise<void> {
+    try {
+        // Import TokenManager dynamically to avoid circular dependencies
+        const { TokenManager } = await import('../utils/tokenManager');
+        
+        // If token is expired and we're recording, stop recording
+        if (!TokenManager.hasValidTokens() && videoRecorder && videoRecorder.state === 'recording') {
+            console.warn('Session expired during video recording, stopping recording');
+            stopVideoRecording();
+            
+            // Dispatch custom event to notify UI components
+            window.dispatchEvent(new CustomEvent('recording-session-expired', {
+                detail: { type: 'video' }
+            }));
+        }
+    } catch (error) {
+        console.error('Error checking session during video recording:', error);
+    }
+}
+
+// Enhanced recording functions with authentication awareness
+export function startVideoRecordingWithAuth(onAuthRequired?: () => void): boolean {
+    // Check if we can record
+    if (!videoRecorder || videoRecorder.state !== 'inactive') {
+        return false;
+    }
+
+    // Dynamic import to check authentication
+    import('../utils/tokenManager').then(({ TokenManager }) => {
+        if (!TokenManager.hasValidTokens()) {
+            if (onAuthRequired) {
+                onAuthRequired();
+            } else {
+                // Dispatch event for auth required
+                window.dispatchEvent(new CustomEvent('recording-auth-required', {
+                    detail: { type: 'video' }
+                }));
+            }
+            return false;
+        }
+        
+        // Start recording if authenticated
+        startVideoRecording();
+        return true;
+    }).catch(error => {
+        console.error('Error checking authentication for video recording:', error);
+        return false;
+    });
+
+    return true;
 }
 
 function updateTimerDisplay() {
@@ -128,6 +198,7 @@ export function cleanupVideoRecording() {
         clearInterval(timeInterval);
         timeInterval = null;
     }
+    stopSessionMonitoring();
     videoRecorder = null;
     chunks = [];
     isRecording = false;

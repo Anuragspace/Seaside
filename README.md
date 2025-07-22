@@ -71,6 +71,7 @@ A modern podcast platform with cloud support, real-time video chat, and seamless
 ### 1. Clone the Repository
 
 ```bash
+# Clone and setup
 git clone https://github.com/Anuragspace/Seaside.git
 cd Seaside
 ```
@@ -119,4 +120,4 @@ MIT License
 
 ---
 
-**Made with ❤️ by [Vibhu Airan](https://github.com/Vibhuair20) and [Anurag Adarsh](https://github.com/Anuragspace).**
+**Made with ❤️ by [Vibhu Airan](https://github.com/Vibhuair20) and [Anurag Adarsh](https://github.com/Anuragspace)**

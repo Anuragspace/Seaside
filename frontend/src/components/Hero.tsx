@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import CreateRoomModal from './modals/CreateRoomModal';
 import JoinRoomModal from './modals/JoinRoomModal';
-import Notification from "../components/notification";
+import Notification from "../components/Notification";
 import light from '../assets/light.png';
 import Navbar from './Navbar';
 

@@ -1,2 +1,2 @@
-# Seaside
-a podcast platform with cloud support
+# Seaside Frontend
+React + TypeScript frontend for the Seaside podcast platform with OAuth2 authentication.

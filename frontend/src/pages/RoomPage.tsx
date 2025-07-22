@@ -6,8 +6,12 @@ import { useWebRTC } from '../hooks/useWebRTC';
 import { useChat } from '../hooks/useChat';
 import ChatBox from '../components/ChatBox';
 import ConnectionStatus from '../components/ConnectionStatus';
-import { setupAudio, startRecording, stopRecording } from '../hooks/audioRecord';
-import { setupVideo, startVideoRecording, stopVideoRecording } from '../hooks/videoRecord';
+import { setupAudio, startRecording, stopRecording, cleanupAudioRecording } from '../hooks/audioRecord';
+import { setupVideo, startVideoRecording, stopVideoRecording, cleanupVideoRecording } from '../hooks/videoRecord';
+import { useRecordingAuth } from '../hooks/useAuthMiddleware';
+import { AuthRequestModal } from '../components/modals/AuthRequestModal';
+import { useAuth } from '../contexts/AuthContext';
+import { getUserDisplayName } from '../utils/guestUtils';
 import light from '../assets/light.png';
 
 function useQuery() {
@@ -18,7 +22,10 @@ const RoomPage: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const query = useQuery();
-  const userName = query.get('user') || 'You';
+  const { user, isAuthenticated } = useAuth();
+  
+  // Determine username: authenticated user's name, URL param, or generated guest name
+  const userName = getUserDisplayName(user, query.get('user') || undefined);
 
   const [micActive, setMicActive] = useState(true);
   const [videoActive, setVideoActive] = useState(true);
@@ -33,6 +40,9 @@ const RoomPage: React.FC = () => {
 
   // Detect mobile device
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  // Authentication middleware for recording features
+  const recordingAuth = useRecordingAuth();
 
   const { 
     sendMessage: sendWebRTCMessage, 
@@ -411,10 +421,18 @@ const RoomPage: React.FC = () => {
         {/* Recording Controls - Hidden on mobile for better UX */}
         {!isMobile && (
           <div className="absolute bottom-24 left-4 flex flex-col space-y-2">
-            <RecordingAudioButton />
-            <RecordingVideoButton />
+            <RecordingAudioButton recordingAuth={recordingAuth} />
+            <RecordingVideoButton recordingAuth={recordingAuth} />
           </div>
         )}
+
+        {/* Authentication Modal for Recording */}
+        <AuthRequestModal
+          isOpen={recordingAuth.isAuthModalOpen}
+          onClose={recordingAuth.closeAuthModal}
+          feature={recordingAuth.authRequiredFeature}
+          redirectAfterAuth={recordingAuth.redirectAfterAuth}
+        />
 
         {/* Chat */}
         <ChatBox 
@@ -448,13 +466,40 @@ const RoomPage: React.FC = () => {
   );
 };
 
-const RecordingAudioButton: React.FC = () => {
+interface RecordingAudioButtonProps {
+  recordingAuth: any; // UseAuthMiddlewareReturn type
+}
+
+const RecordingAudioButton: React.FC<RecordingAudioButtonProps> = ({ recordingAuth }) => {
   const [recording, setRecording] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
 
   useEffect(() => {
     setupAudio();
-  }, []);
+
+    // Listen for session expiration during recording
+    const handleSessionExpired = (event: CustomEvent) => {
+      console.warn('Session expired during audio recording');
+      setRecording(false);
+      setCountdown(null);
+      // Show auth modal to re-authenticate
+      recordingAuth.requestAuth();
+    };
+
+    const handleAuthRequired = (event: CustomEvent) => {
+      console.warn('Authentication required for audio recording');
+      recordingAuth.requestAuth();
+    };
+
+    window.addEventListener('recording-session-expired', handleSessionExpired as EventListener);
+    window.addEventListener('recording-auth-required', handleAuthRequired as EventListener);
+
+    return () => {
+      cleanupAudioRecording();
+      window.removeEventListener('recording-session-expired', handleSessionExpired as EventListener);
+      window.removeEventListener('recording-auth-required', handleAuthRequired as EventListener);
+    };
+  }, [recordingAuth]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -471,6 +516,11 @@ const RecordingAudioButton: React.FC = () => {
   }, [countdown]);
 
   const handleStartRecording = () => {
+    // Check authentication before starting recording
+    if (!recordingAuth.canAccess) {
+      recordingAuth.requestAuth();
+      return;
+    }
     setCountdown(3);
   };
 
@@ -518,7 +568,11 @@ const RecordingAudioButton: React.FC = () => {
   );
 };
 
-const RecordingVideoButton: React.FC = () => {
+interface RecordingVideoButtonProps {
+  recordingAuth: any; // UseAuthMiddlewareReturn type
+}
+
+const RecordingVideoButton: React.FC<RecordingVideoButtonProps> = ({ recordingAuth }) => {
   const [recordingVideo, setRecordingVideo] = useState(false);
   const [countdownVideo, setCountdownVideo] = useState<number | null>(null);
   const [timer, setTimer] = useState('00:00');
@@ -527,7 +581,35 @@ const RecordingVideoButton: React.FC = () => {
 
   useEffect(() => {
     setupVideo();
-  }, []);
+
+    // Listen for session expiration during video recording
+    const handleSessionExpired = (event: CustomEvent) => {
+      console.warn('Session expired during video recording');
+      setRecordingVideo(false);
+      setCountdownVideo(null);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      setTimer('00:00');
+      // Show auth modal to re-authenticate
+      recordingAuth.requestAuth();
+    };
+
+    const handleAuthRequired = (event: CustomEvent) => {
+      console.warn('Authentication required for video recording');
+      recordingAuth.requestAuth();
+    };
+
+    window.addEventListener('recording-session-expired', handleSessionExpired as EventListener);
+    window.addEventListener('recording-auth-required', handleAuthRequired as EventListener);
+
+    return () => {
+      cleanupVideoRecording();
+      window.removeEventListener('recording-session-expired', handleSessionExpired as EventListener);
+      window.removeEventListener('recording-auth-required', handleAuthRequired as EventListener);
+    };
+  }, [recordingAuth]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setTimeout>;
@@ -551,6 +633,11 @@ const RecordingVideoButton: React.FC = () => {
   }, [countdownVideo]);
 
   const handleStartRecordingVideo = () => {
+    // Check authentication before starting recording
+    if (!recordingAuth.canAccess) {
+      recordingAuth.requestAuth();
+      return;
+    }
     setCountdownVideo(3);
   };
 

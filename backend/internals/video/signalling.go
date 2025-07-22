@@ -90,7 +90,7 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 
 	// Get updated participants list
 	participants = AllRooms.Get(roomID)
-	
+
 	// Notify the new participant if there are already others
 	if len(participants) > 1 {
 		log.Printf("Notifying new participant in room %s that others are present", roomID)
@@ -128,7 +128,7 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 				log.Printf("Heartbeat goroutine panic for room %s: %v", roomID, r)
 			}
 		}()
-		
+
 		for {
 			select {
 			case <-heartbeatTicker.C:
@@ -214,6 +214,6 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 			log.Printf("Error notifying participant of leave in room %s: %v", roomID, err)
 		}
 	}
-	
+
 	c.Close()
 }

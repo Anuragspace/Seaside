@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useNavigate } from "react-router-dom";
+import { useAuth } from '../../contexts/AuthContext';
 
 interface JoinRoomModalProps {
   onClose: () => void;
@@ -9,11 +10,19 @@ interface JoinRoomModalProps {
 }
 
 const JoinRoomModal: React.FC<JoinRoomModalProps> = ({ onClose, onJoinRoom }) => {
+  const { user, isAuthenticated } = useAuth();
   const [roomId, setRoomId] = useState('');
   const [userName, setUserName] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+
+  // Initialize username based on authentication status
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      setUserName(user.username);
+    }
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
     // Close on escape key
@@ -102,7 +111,7 @@ const JoinRoomModal: React.FC<JoinRoomModalProps> = ({ onClose, onJoinRoom }) =>
             </div>
             {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
           </div>
-          <div className="mb-6">
+          <div className="mb-4">
             <label htmlFor="joinUserName" className="block text-sm font-medium text-gray-400 mb-1">
               Your Name
             </label>
@@ -114,7 +123,14 @@ const JoinRoomModal: React.FC<JoinRoomModalProps> = ({ onClose, onJoinRoom }) =>
               placeholder="Enter your name"
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               required
+              disabled={isAuthenticated && user}
             />
+            {isAuthenticated && user && (
+              <p className="mt-1 text-xs text-green-400">✓ Signed in as {user.username}</p>
+            )}
+            {!isAuthenticated && (
+              <p className="mt-1 text-xs text-yellow-400">⚠ You'll join as a guest. Sign in for recording features.</p>
+            )}
           </div>
           <div className="flex justify-end">
             <button

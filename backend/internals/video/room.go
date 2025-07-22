@@ -10,12 +10,12 @@ import (
 )
 
 type Participant struct {
-	Host      bool
-	ID        string
-	Conn      *websocket.Conn
-	Mutex     sync.Mutex
-	JoinedAt  time.Time
-	LastPing  time.Time
+	Host     bool
+	ID       string
+	Conn     *websocket.Conn
+	Mutex    sync.Mutex
+	JoinedAt time.Time
+	LastPing time.Time
 }
 
 type RoomMap struct {
@@ -25,7 +25,7 @@ type RoomMap struct {
 
 func (r *RoomMap) Init() {
 	r.Map = make(map[string][]Participant)
-	
+
 	// Start cleanup routine for inactive rooms
 	go r.cleanupRoutine()
 }
@@ -43,7 +43,7 @@ func (r *RoomMap) CreateRoom() string {
 	// Use crypto/rand for better randomness in production
 	rgen := rand.New(rand.NewSource(time.Now().UnixNano()))
 	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-	
+
 	var roomID string
 	for {
 		b := make([]rune, 8)
@@ -51,7 +51,7 @@ func (r *RoomMap) CreateRoom() string {
 			b[i] = letters[rgen.Intn(len(letters))]
 		}
 		roomID = string(b)
-		
+
 		// Ensure room ID is unique
 		if _, exists := r.Map[roomID]; !exists {
 			break
@@ -171,7 +171,7 @@ func (r *RoomMap) cleanup() {
 
 	for roomID, participants := range r.Map {
 		activeParticipants := []Participant{}
-		
+
 		for _, participant := range participants {
 			// Remove participants that haven't pinged in 2 minutes
 			if now.Sub(participant.LastPing) < 2*time.Minute {

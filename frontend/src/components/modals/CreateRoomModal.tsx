@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface CreateRoomModalProps {
   onClose: () => void;
@@ -9,11 +10,19 @@ interface CreateRoomModalProps {
 }
 
 const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom, onError }) => {
+  const { user, isAuthenticated } = useAuth();
   const [roomId, setRoomId] = useState('');
   const [userName, setUserName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Initialize username based on authentication status
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      setUserName(user.username);
+    }
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
   const fetchRoomId = async () => {
@@ -120,7 +129,7 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom
             </div>
             <p className="mt-1 text-xs text-gray-500">This is your unique room identifier</p>
           </div>
-          <div className="mb-6">
+          <div className="mb-4">
             <label htmlFor="userName" className="block text-sm font-medium text-gray-400 mb-1">
               Your Name
             </label>
@@ -132,7 +141,14 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom
               placeholder="Enter your name"
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               required
+              disabled={isAuthenticated && user}
             />
+            {isAuthenticated && user && (
+              <p className="mt-1 text-xs text-green-400">✓ Signed in as {user.username}</p>
+            )}
+            {!isAuthenticated && (
+              <p className="mt-1 text-xs text-yellow-400">⚠ You'll join as a guest. Sign in for recording features.</p>
+            )}
           </div>
           {error && <div className="text-red-500 mb-2">{error}</div>}
           <div className="flex justify-end">

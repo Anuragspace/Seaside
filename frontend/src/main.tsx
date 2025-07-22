@@ -2,22 +2,24 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter as Router } from 'react-router-dom';
 import App from './App';
 import './index.css';
-import { ClerkProvider } from '@clerk/clerk-react';
+import { AuthProvider } from './contexts/AuthContext';
+import { NotificationProvider } from './contexts/NotificationContext';
+import ErrorBoundary from './components/ErrorBoundary';
+import NotificationContainer from './components/NotificationContainer';
+import { setupGlobalErrorHandlers } from './utils/globalErrorHandler';
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-
-if (!PUBLISHABLE_KEY) {
-  throw new Error('Missing Clerk Publishable Key');
-}
+// Initialize global error handlers
+setupGlobalErrorHandlers();
 
 createRoot(document.getElementById('root')!).render(
-  <ClerkProvider
-    publishableKey={PUBLISHABLE_KEY}
-    routerPush={(to) => window.history.pushState({}, '', to)}
-    routerReplace={(to) => window.history.replaceState({}, '', to)}
-  >
-    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <App />
-    </Router>
-  </ClerkProvider>
+  <ErrorBoundary>
+    <NotificationProvider>
+      <AuthProvider>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <App />
+          <NotificationContainer />
+        </Router>
+      </AuthProvider>
+    </NotificationProvider>
+  </ErrorBoundary>
 );

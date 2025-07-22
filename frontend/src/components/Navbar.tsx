@@ -1,45 +1,25 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Moon, Sun, User, X, Menu } from 'lucide-react';
+import { Moon, Sun, User, X, Menu, LogOut } from 'lucide-react';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
-import { SignedIn, SignedOut, useClerk } from '@clerk/clerk-react';
-import { Avatar, Button } from '@nextui-org/react';
-
-interface SerializedUser {
-  id: string;
-  firstName?: string | null;
-  lastName?: string | null;
-  username?: string | null;
-  emailAddress?: string | null;
-  imageUrl?: string | null;
-}
+import { useAuth } from '../contexts/AuthContext';
+import { Avatar, Button, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from '@nextui-org/react';
+import LoadingSkeleton from './LoadingSkeleton';
 
 interface NavbarProps {
-  user?: SerializedUser | null;
+  // No longer need user prop since we get it from auth context
 }
 
-export default function Navbar({ user }: NavbarProps) {
-  const {signOut} = useClerk();
+export default function Navbar({}: NavbarProps) {
+  const { user, isAuthenticated, isLoading, signOut } = useAuth();
   const navigate = useNavigate();
   const pathname = window.location.pathname;
-  const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
   // check if we are on the homepage
-  const isCorrect = 
-    pathname === "/" || pathname?.startsWith("/");
-
-  
-  // handleing the scrool effect
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10);
-    };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  const isCorrect = pathname === "/";
 
   // Close mobile menu when window is resized to desktop size
   useEffect(() => {
@@ -88,31 +68,39 @@ export default function Navbar({ user }: NavbarProps) {
     };
   }, [isMobileMenuOpen]);
 
-  const handleSignOut = () => {
-    signOut(() => {
+  const handleSignOut = async () => {
+    try {
+      await signOut();
       navigate("/");
-    });
+    } catch (error) {
+      console.error('Sign out error:', error);
+      // Navigate anyway since signOut clears local state
+      navigate("/");
+    }
   };
+
+  // Debug logging for auth state
+  console.log('Navbar Auth State:', {
+    user,
+    isAuthenticated,
+    isLoading,
+    tokens: {
+      accessToken: localStorage.getItem('auth_access_token'),
+      refreshToken: localStorage.getItem('auth_refresh_token')
+    }
+  });
 
   // Process user data with defaults if not provided
   const userDetails = {
-    fullName: user
-      ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
-      : "",
     initials: user
-      ? `${user.firstName || ""} ${user.lastName || ""}`
-          .trim()
+      ? user.username
           .split(" ")
           .map((name) => name?.[0] || "")
           .join("")
           .toUpperCase() || "U"
       : "U",
-    displayName: user
-      ? user.firstName && user.lastName
-        ? `${user.firstName} ${user.lastName}`
-        : user.firstName || user.username || user.emailAddress || "User"
-      : "User",
-    email: user?.emailAddress || "",
+    displayName: user?.username || "User",
+    email: user?.email || "",
   };
 
   const toggleMobileMenu = () => {
@@ -130,44 +118,84 @@ export default function Navbar({ user }: NavbarProps) {
         SeaSide
       </Link>
 
-      <div className='hidden md:flex gap-4 items centre'>
-        <SignedOut>
-          <Link to = "/sign-in">
-            <Button variant='flat' color = "primary">
-              Sign In
-            </Button>
-          </Link>
-          <Link to = '/sign-up'>
-            <Button variant='flat' color = "primary">
-              Sign Up
-            </Button>
-          </Link>
-        </SignedOut>
+      <div className='hidden md:flex gap-4 items-center'>
+        {isLoading && (
+          <LoadingSkeleton variant="navbar" />
+        )}
+        
+        {!isAuthenticated && !isLoading && (
+          <>
+            <Link to="/sign-in">
+              <Button variant='flat' color="primary">
+                Sign In
+              </Button>
+            </Link>
+            <Link to='/sign-up'>
+              <Button variant='flat' color="primary">
+                Sign Up
+              </Button>
+            </Link>
+          </>
+        )}
 
-        <SignedIn>
-          <div className='flex items-centre gap-4'>
+        {isAuthenticated && !isLoading && (
+          <div className='flex items-center gap-4'>
             {!isCorrect && (
-              <Link to ="/">
+              <Link to="/">
                 <Button variant='flat' color='primary'>
                   Dashboard
                 </Button>
               </Link>
             )}
+            
+            {/* User profile dropdown */}
+            <Dropdown placement="bottom-end">
+              <DropdownTrigger>
+                <Avatar
+                  name={userDetails.initials}
+                  size='sm'
+                  src={user?.avatar || undefined}
+                  className='h-8 w-8 cursor-pointer hover:opacity-80 transition-opacity'
+                  fallback={<User className='h-4 w-4' />}
+                />
+              </DropdownTrigger>
+              <DropdownMenu aria-label="User menu">
+                <DropdownItem key="profile" className="h-14 gap-2">
+                  <p className="font-semibold">Signed in as</p>
+                  <p className="font-semibold">{userDetails.email}</p>
+                </DropdownItem>
+                <DropdownItem key="settings">
+                  Profile Settings
+                </DropdownItem>
+                <DropdownItem 
+                  key="logout" 
+                  color="danger"
+                  startContent={<LogOut className="h-4 w-4" />}
+                  onPress={handleSignOut}
+                >
+                  Sign Out
+                </DropdownItem>
+              </DropdownMenu>
+            </Dropdown>
           </div>
-        </SignedIn>
+        )}
       </div>
 
       {/* for mobile menu */}
-      <div className='md:hidden flex items-centre gap-3'>
-        <SignedIn>
+      <div className='md:hidden flex items-center gap-3'>
+        {isLoading && (
+          <LoadingSkeleton variant="profile" className="h-8" />
+        )}
+        
+        {isAuthenticated && !isLoading && (
           <Avatar
             name={userDetails.initials}
             size='sm'
-            src={user?.imageUrl || undefined}
-            className='h-8 w-8 flex-shrink--0'
+            src={user?.avatar || undefined}
+            className='h-8 w-8 flex-shrink-0'
             fallback={<User className='h-4 w-4' />}
-            />
-        </SignedIn>
+          />
+        )}
         <button
               className="z-50 p-2"
               onClick={toggleMobileMenu}
@@ -196,7 +224,14 @@ export default function Navbar({ user }: NavbarProps) {
               isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
             } md:hidden`}
           >
-            <SignedOut>
+            {isLoading && (
+              <div className="flex flex-col gap-4 items-center">
+                <LoadingSkeleton variant="button" />
+                <LoadingSkeleton variant="button" />
+              </div>
+            )}
+            
+            {!isAuthenticated && !isLoading && (
               <div className="flex flex-col gap-4 items-center">
                 <Link
                   to="/sign-in"
@@ -215,16 +250,16 @@ export default function Navbar({ user }: NavbarProps) {
                   </Button>
                 </Link>
               </div>
-            </SignedOut>
+            )}
 
-            <SignedIn>
+            {isAuthenticated && !isLoading && (
               <div className="flex flex-col gap-6">
                 {/* User info */}
                 <div className="flex items-center gap-3 py-4 border-b border-default-200">
                   <Avatar
                     name={userDetails.initials}
                     size="md"
-                    src={user?.imageUrl || undefined}
+                    src={user?.avatar || undefined}
                     className="h-10 w-10 flex-shrink-0"
                     fallback={<User className="h-5 w-5" />}
                   />
@@ -240,7 +275,7 @@ export default function Navbar({ user }: NavbarProps) {
                 <div className="flex flex-col gap-4">
                   {!isCorrect && (
                     <Link
-                      to="/dashboard"
+                      to="/"
                       className="py-2 px-3 hover:bg-default-100 rounded-md transition-colors"
                     >
                       <Button variant="light" color="primary" onPress={() => setIsMobileMenuOpen(false)}>
@@ -249,7 +284,7 @@ export default function Navbar({ user }: NavbarProps) {
                     </Link>
                   )}
                   <Link
-                    to="/dashboard?tab=profile"
+                    to="/profile"
                     className="py-2 px-3 hover:bg-default-100 rounded-md transition-colors"
                   >
                     <Button variant="light" color="primary" onPress={() => setIsMobileMenuOpen(false)}>
@@ -267,7 +302,7 @@ export default function Navbar({ user }: NavbarProps) {
                   </button>
                 </div>
               </div>
-            </SignedIn>
+            )}
           </div>
 
       <div className="flex items-center">

@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
+
+	"seaside/handlers"
 	"seaside/internals/chat"
 	"seaside/internals/middleware"
 	"seaside/internals/video"
-
-	"time"
+	"seaside/lib/auth"
+	"seaside/lib/db"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/etag"
@@ -19,7 +22,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func setupRoutes(app *fiber.App) {
+func setupRoutes(app *fiber.App, authHandlers *handlers.AuthHandlers, jwtUtil *auth.JWTUtil) {
 	video.AllRooms.Init()
 
 	// Health check route
@@ -29,6 +32,27 @@ func setupRoutes(app *fiber.App) {
 			"message":   "✅ Backend is up and running! Go back to https://seasides.vercel.app/ and Create Room ID",
 			"timestamp": time.Now().Unix(),
 		})
+	})
+
+	// Database health check route
+	app.Get("/health", func(c *fiber.Ctx) error {
+		if db.GlobalHealthChecker == nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"error": "Health checker not initialized",
+			})
+		}
+		
+		healthStatus := db.GlobalHealthChecker.CheckHealth()
+		
+		// Set appropriate HTTP status based on health
+		statusCode := fiber.StatusOK
+		if healthStatus.Status == "unhealthy" {
+			statusCode = fiber.StatusServiceUnavailable
+		} else if healthStatus.Status == "degraded" {
+			statusCode = fiber.StatusPartialContent
+		}
+		
+		return c.Status(statusCode).JSON(healthStatus)
 	})
 
 	// Stats endpoint for monitoring
@@ -86,6 +110,51 @@ func setupRoutes(app *fiber.App) {
 		return fiber.ErrUpgradeRequired
 	})
 
+	// Authentication routes (public) with rate limiting
+	authGroup := app.Group("/auth")
+	
+	// Rate limiting for authentication endpoints
+	authRateLimit := limiter.New(limiter.Config{
+		Max:        5, // 5 requests per minute
+		Expiration: 1 * time.Minute,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"error": "Too many authentication requests. Please try again later.",
+			})
+		},
+	})
+	
+	// OAuth2 state generation (less restrictive rate limit)
+	oauthStateLimit := limiter.New(limiter.Config{
+		Max:        10, // 10 requests per minute
+		Expiration: 1 * time.Minute,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"error": "Too many state generation requests. Please try again later.",
+			})
+		},
+	})
+	
+	authGroup.Post("/register", authRateLimit, authHandlers.RegisterHandler)
+	authGroup.Post("/login", authRateLimit, authHandlers.LoginHandler)
+	authGroup.Post("/refresh", authHandlers.RefreshTokenHandler)
+	authGroup.Post("/logout", authHandlers.LogoutHandler)
+
+	// OAuth2 routes
+	authGroup.Get("/oauth/state/:provider", oauthStateLimit, authHandlers.GenerateOAuth2StateHandler)
+	authGroup.Post("/oauth/google", authRateLimit, authHandlers.GoogleOAuth2Handler)
+	authGroup.Post("/oauth/github", authRateLimit, authHandlers.GitHubOAuth2Handler)
+
+	// Protected API routes
+	api := app.Group("/api", auth.JWTMiddleware(jwtUtil))
+	api.Get("/me", authHandlers.GetMeHandler)
+
 	// Create room endpoint
 	app.Get("/create-room", video.CreateRoomRequestHandler)
 
@@ -114,6 +183,24 @@ func main() {
 	if err != nil {
 		fmt.Println("Error loading .env file:", err)
 	}
+
+	// Initialize database
+	if err := db.InitializeDatabase(); err != nil {
+		log.Fatalf("Error connecting to database: %v", err)
+	}
+
+	// Create repository
+	userRepo := db.NewUserRepository(db.DB)
+
+	// Create JWT utility
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET environment variable is required")
+	}
+	jwtUtil := auth.NewJWTUtil(jwtSecret)
+
+	// Create handlers
+	authHandlers := handlers.NewAuthHandlers(userRepo, jwtUtil)
 
 	app := fiber.New(fiber.Config{
 		AppName:           "Seaside Clone v1.0.2",
@@ -148,7 +235,7 @@ func main() {
 	app.Use(middleware.CorsConfig())
 
 	// Setup routes
-	setupRoutes(app)
+	setupRoutes(app, authHandlers, jwtUtil)
 
 	// Get port from environment or use default
 	port := os.Getenv("PORT")

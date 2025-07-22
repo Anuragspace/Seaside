@@ -1,0 +1,65 @@
+# Backend specific .gitignore
+
+# Environment variables (CRITICAL - NEVER COMMIT!)
+.env
+.env.local
+.env.development
+.env.production
+*.env
+
+# Go build outputs
+main
+dbmanager
+test_dbmanager
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# Vendor directory (if using go mod vendor)
+vendor/
+
+# Database backups
+backups/
+*.sql
+*.backup
+*.dump
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Air live reload tool
+tmp/
+.air.toml
+
+# Local development files
+local/
+.local/
+
+# Test coverage
+coverage.out
+coverage.html
