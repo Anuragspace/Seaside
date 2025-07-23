@@ -13,6 +13,7 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
+    "@heroui/react": "^2.8.1",
     "@hookform/resolvers": "^5.1.1",
     "date-fns": "^2.30.0",
     "framer-motion": "^12.23.6",
