@@ -8,8 +8,8 @@ import { useAuthMiddleware } from '../hooks/useAuthMiddleware';
 import { AuthRequestModal } from '../components/modals/AuthRequestModal';
 import * as AuthContext from '../contexts/AuthContext';
 
-// Mock NextUI components
-vi.mock('@nextui-org/react', () => ({
+// Mock HeroUI components (updated from NextUI)
+vi.mock('@heroui/react', () => ({
   Modal: ({ children, isOpen, onOpenChange }: any) => 
     isOpen ? <div data-testid="modal" onClick={() => onOpenChange(false)}>{children}</div> : null,
   ModalContent: ({ children }: any) => <div data-testid="modal-content">{children}</div>,
@@ -48,14 +48,16 @@ const TestWrapper = ({ children }: { children: React.ReactNode }) => (
 );
 
 // Test component that uses auth middleware
+import type { AuthRequiredFeature } from '../hooks/useAuthMiddleware';
+
 const TestComponentWithMiddleware = ({ 
   requireAuth = true, 
-  feature = 'test-feature',
+  feature = 'test-feature' as AuthRequiredFeature,
   onAuthRequired,
   onCanAccess 
 }: {
   requireAuth?: boolean;
-  feature?: string;
+  feature?: AuthRequiredFeature;
   onAuthRequired?: () => void;
   onCanAccess?: (canAccess: boolean) => void;
 }) => {
@@ -113,14 +115,13 @@ const RecordingComponent = () => {
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         feature="recording"
-        message="Authentication is required to record audio and video."
       />
     </div>
   );
 };
 
-// Mock auth context values
-const mockAuthContextValue = {
+// Complete mock auth context values
+const mockAuthContextValue: AuthContext.AuthContextType = {
   user: null,
   isAuthenticated: false,
   isLoading: false,
@@ -128,7 +129,9 @@ const mockAuthContextValue = {
   signUp: vi.fn(),
   signInWithOAuth: vi.fn(),
   signOut: vi.fn(),
-  refreshToken: vi.fn()
+  refreshToken: vi.fn(),
+  handleOAuth2Callback: vi.fn(),
+  authError: null,
 };
 
 describe('Authentication Middleware Integration Tests', () => {
@@ -471,7 +474,7 @@ describe('Authentication Middleware Integration Tests', () => {
         <TestWrapper>
           <TestComponentWithMiddleware 
             requireAuth={false}
-            feature="chat"
+            feature={"chat" as AuthRequiredFeature}
           />
         </TestWrapper>
       );
@@ -508,7 +511,7 @@ describe('Authentication Middleware Integration Tests', () => {
         <TestWrapper>
           <TestComponentWithMiddleware 
             requireAuth={false}
-            feature="room-joining"
+            feature={"room-joining" as AuthRequiredFeature}
           />
         </TestWrapper>
       );

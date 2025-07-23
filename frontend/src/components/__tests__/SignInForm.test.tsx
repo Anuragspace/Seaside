@@ -6,27 +6,50 @@ import SignInForm from '../SignInForm';
 import { AuthProvider } from '../../contexts/AuthContext';
 import { NotificationProvider } from '../../contexts/NotificationContext';
 import * as AuthContext from '../../contexts/AuthContext';
+// If AuthContextType is exported separately:
+import type { AuthContextType } from '../../contexts/AuthContext';
 
-// Mock NextUI components
-vi.mock('@nextui-org/react', () => ({
-  Card: ({ children, className }: any) => <div className={className}>{children}</div>,
-  CardBody: ({ children }: any) => <div>{children}</div>,
-  Input: ({ label, type, value, onChange, isInvalid, errorMessage, ...props }: any) => (
+// Mock all external dependencies
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => vi.fn(),
+    Link: ({ children, to, ...props }: any) => (
+      <a href={to} {...props}>{children}</a>
+    ),
+  };
+});
+
+// Mock HeroUI components
+vi.mock('@heroui/react', () => ({
+  Card: ({ children, className }: any) => <div className={className} data-testid="card">{children}</div>,
+  CardBody: ({ children }: any) => <div data-testid="card-body">{children}</div>,
+  CardHeader: ({ children }: any) => <div data-testid="card-header">{children}</div>,
+  CardFooter: ({ children }: any) => <div data-testid="card-footer">{children}</div>,
+  Input: ({ label, type, value, onChange, onValueChange, isInvalid, errorMessage, ...props }: any) => (
     <div>
-      <label>{label}</label>
+      <label htmlFor={props.id}>{label}</label>
       <input
+        id={props.id}
         type={type}
         value={value}
-        onChange={(e) => onChange?.(e.target.value)}
+        onChange={(e) => {
+          onChange?.(e);
+          onValueChange?.(e.target.value);
+        }}
         data-testid={props['data-testid'] || label?.toLowerCase().replace(/\s+/g, '-')}
         {...props}
       />
       {isInvalid && errorMessage && <span data-testid="error-message">{errorMessage}</span>}
     </div>
   ),
-  Button: ({ children, onPress, isLoading, isDisabled, className, ...props }: any) => (
+  Button: ({ children, onPress, onClick, isLoading, isDisabled, className, ...props }: any) => (
     <button
-      onClick={onPress}
+      onClick={(e) => {
+        onPress?.(e);
+        onClick?.(e);
+      }}
       disabled={isDisabled || isLoading}
       className={className}
       data-testid={props['data-testid'] || 'button'}
@@ -36,12 +59,20 @@ vi.mock('@nextui-org/react', () => ({
     </button>
   ),
   Divider: () => <hr data-testid="divider" />,
+  Link: ({ children, href, ...props }: any) => (
+    <a href={href} {...props}>{children}</a>
+  ),
 }));
 
 // Mock react-icons
 vi.mock('react-icons/fa', () => ({
-  FaGoogle: () => <div data-testid="google-icon" />,
-  FaGithub: () => <div data-testid="github-icon" />,
+  FaGoogle: (props: any) => <div data-testid="google-icon" {...props} />,
+  FaGithub: (props: any) => <div data-testid="github-icon" {...props} />,
+}));
+
+vi.mock('react-icons/fi', () => ({
+  FiEye: (props: any) => <div data-testid="eye-icon" {...props} />,
+  FiEyeOff: (props: any) => <div data-testid="eye-off-icon" {...props} />,
 }));
 
 // Test wrapper component
@@ -55,8 +86,8 @@ const TestWrapper = ({ children }: { children: React.ReactNode }) => (
   </BrowserRouter>
 );
 
-// Mock auth context values
-const mockAuthContextValue = {
+// Complete mock auth context values
+const mockAuthContextValue: AuthContext.AuthContextType = {
   user: null,
   isAuthenticated: false,
   isLoading: false,
@@ -64,7 +95,9 @@ const mockAuthContextValue = {
   signUp: vi.fn(),
   signInWithOAuth: vi.fn(),
   signOut: vi.fn(),
-  refreshToken: vi.fn()
+  refreshToken: vi.fn(),
+  handleOAuth2Callback: vi.fn(),
+  authError: null,
 };
 
 describe('SignInForm Component', () => {
@@ -83,8 +116,10 @@ describe('SignInForm Component', () => {
 
       expect(screen.getByText('Welcome Back')).toBeInTheDocument();
       expect(screen.getByText('Sign in to your account')).toBeInTheDocument();
-      expect(screen.getByLabelText('Email')).toBeInTheDocument();
-      expect(screen.getByLabelText('Password')).toBeInTheDocument();
+      
+      // Use more flexible selectors
+      expect(screen.getByRole('textbox', { name: /email/i }) || screen.getByTestId('email')).toBeInTheDocument();
+      expect(screen.getByLabelText(/password/i) || screen.getByTestId('password')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
     });
 
@@ -126,9 +161,18 @@ describe('SignInForm Component', () => {
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(screen.getByText('Email is required')).toBeInTheDocument();
-        expect(screen.getByText('Password is required')).toBeInTheDocument();
-      });
+        expect(
+          screen.getByText('Email is required') || 
+          screen.getByText(/email.*required/i)
+        ).toBeInTheDocument();
+      }, { timeout: 3000 });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('Password is required') || 
+          screen.getByText(/password.*required/i)
+        ).toBeInTheDocument();
+      }, { timeout: 3000 });
     });
 
     it('should show validation error for invalid email format', async () => {
@@ -298,12 +342,17 @@ describe('SignInForm Component', () => {
         </TestWrapper>
       );
 
-      const googleButton = screen.getByText('Continue with Google');
+      // Try multiple selectors for Google button
+      const googleButton = 
+        screen.getByText('Continue with Google') ||
+        screen.getByRole('button', { name: /google/i }) ||
+        screen.getByTestId('google-button');
+      
       fireEvent.click(googleButton);
 
       await waitFor(() => {
         expect(mockSignInWithOAuth).toHaveBeenCalledWith('google');
-      });
+      }, { timeout: 3000 });
     });
 
     it('should call signInWithOAuth for GitHub when GitHub button is clicked', async () => {

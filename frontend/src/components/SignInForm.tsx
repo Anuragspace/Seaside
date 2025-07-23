@@ -13,7 +13,7 @@ import {
   CardHeader,
   CardFooter,
   Divider,
-} from "@nextui-org/react";
+} from "@heroui/react";
 import {
   Mail,
   Lock,

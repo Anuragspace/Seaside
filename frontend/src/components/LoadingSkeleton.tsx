@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Card, CardBody, Skeleton } from '@nextui-org/react';
+import { Card, CardBody, Skeleton } from '@heroui/react';
 
 interface LoadingSkeletonProps {
   variant?: 'form' | 'navbar' | 'profile' | 'button';

@@ -13,8 +13,8 @@ import SignUpForm from '../components/SignUpForm';
 vi.mock('../services/authService');
 vi.mock('../services/oauth2Config');
 
-// Mock NextUI components
-vi.mock('@nextui-org/react', () => ({
+// Mock heroUi components
+vi.mock('@heroui/react', () => ({
   Card: ({ children, className }: any) => <div className={className}>{children}</div>,
   CardBody: ({ children }: any) => <div>{children}</div>,
   Input: ({ label, type, value, onChange, isInvalid, errorMessage, ...props }: any) => (
@@ -97,6 +97,9 @@ describe('OAuth2 Integration Tests', () => {
       state: 'state-456'
     });
     MockedOAuth2Utils.verifyState.mockReturnValue(true);
+    (MockedOAuth2Utils as any).clearState = vi.fn(); // Add this line
+    MockedOAuth2Utils.generateState = vi.fn().mockReturnValue('random-state-123'); // Add this too
+    MockedOAuth2Utils.storeState = vi.fn(); // Add this too
   });
 
   afterEach(() => {
@@ -325,13 +328,14 @@ describe('OAuth2 Integration Tests', () => {
     });
 
     it('should clear OAuth2 state after successful callback', async () => {
-      MockedOAuth2Utils.clearState = vi.fn();
+      // Mock the method before using it
+      (MockedOAuth2Utils as any).clearState = vi.fn();
       
       const callbackUrl = 'http://localhost:3000/auth/callback/google?code=auth-code-123&state=state-456';
       
       await MockedAuthService.handleOAuth2Callback('google', callbackUrl);
 
-      expect(MockedOAuth2Utils.clearState).toHaveBeenCalled();
+      expect((MockedOAuth2Utils as any).clearState).toHaveBeenCalled();
     });
   });
 

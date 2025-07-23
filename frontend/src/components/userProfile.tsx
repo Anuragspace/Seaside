@@ -21,7 +21,7 @@ import {
   Tabs,
   Tab,
   Switch,
-} from "@nextui-org/react";
+} from "@heroui/react";
 import { useNavigate } from "react-router-dom";
 import { 
   Mail, 

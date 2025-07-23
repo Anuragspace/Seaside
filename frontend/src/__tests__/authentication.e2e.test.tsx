@@ -22,7 +22,7 @@ vi.mock('../pages/HomePage', () => ({
 }));
 
 // Mock NextUI components for forms
-vi.mock('@nextui-org/react', () => ({
+vi.mock('@heroui/react', () => ({
   Card: ({ children, className }: any) => <div className={className}>{children}</div>,
   CardBody: ({ children }: any) => <div>{children}</div>,
   Input: ({ label, type, value, onChange, isInvalid, errorMessage, ...props }: any) => (

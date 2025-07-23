@@ -15,7 +15,7 @@ import {
   Divider,
   Input,
   Button,
-} from "@nextui-org/react";
+} from "@heroui/react";
 import {
   AlertCircle,
   Mail,

@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { Moon, Sun, User, X, Menu, LogOut } from 'lucide-react';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { useAuth } from '../contexts/AuthContext';
-import { Avatar, Button, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from '@nextui-org/react';
+import { Avatar, Button, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from '@heroui/react';
 import LoadingSkeleton from './LoadingSkeleton';
 
 interface NavbarProps {

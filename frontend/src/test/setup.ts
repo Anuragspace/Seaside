@@ -54,8 +54,8 @@ Object.defineProperty(window, 'sessionStorage', {
 global.fetch = vi.fn();
 
 // Mock NextUI components
-vi.mock('@nextui-org/react', async () => {
-  const actual = await vi.importActual('@nextui-org/react');
+vi.mock('@heroui/react', async () => {
+  const actual = await vi.importActual('@heroui/react');
   return {
     ...actual,
     Card: ({ children, className, ...props }: any) => React.createElement('div', { className, ...props }, children),
