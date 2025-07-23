@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNotifications } from '../contexts/NotificationContext';
-import Notification from './Notification';
+import { Notification } from './Notification'; // Changed: use named import
 
 /**
  * Container component for displaying notifications

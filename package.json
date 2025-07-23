@@ -3,6 +3,22 @@
     "@types/node": "^24.0.15"
   },
   "dependencies": {
+    "@heroui/accordion": "^2.2.20",
+    "@heroui/avatar": "^2.2.19",
+    "@heroui/breadcrumbs": "^2.2.19",
+    "@heroui/card": "^2.2.22",
+    "@heroui/checkbox": "^2.3.23",
+    "@heroui/date-input": "^2.3.23",
+    "@heroui/date-picker": "^2.3.24",
+    "@heroui/input-otp": "^2.1.23",
+    "@heroui/listbox": "^2.3.22",
+    "@heroui/menu": "^2.2.22",
+    "@heroui/modal": "^2.2.20",
+    "@heroui/navbar": "^2.2.21",
+    "@heroui/pagination": "^2.2.21",
+    "@heroui/popover": "^2.3.23",
+    "@heroui/react": "^2.8.1",
+    "@heroui/table": "^2.2.23",
     "framer-motion": "^12.23.6"
   }
 }
