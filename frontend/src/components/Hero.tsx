@@ -80,36 +80,36 @@ const Hero: React.FC = () => {
 
 
         </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center w-full">
+        <motion.div 
+          className="flex flex-col sm:flex-row gap-4 justify-center items-center w-full"
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.5, ease: "easeOut" }}
+        >
+          {/* Create Room Button */}
           <motion.div
-            className="box-border flex flex-row gap-[18px] items-start justify-center p-0 relative shrink-0 w-full sm:w-auto"
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 1.2, ease: "easeOut" }}
+            className="relative h-[52px] w-full sm:w-[210px] rounded-full bg-[#3e34ff] overflow-hidden cursor-pointer max-w-sm"
+            whileHover={{ scale: 1.05, boxShadow: "0px 8px 40px rgba(62,52,255,0.8)" }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setIsCreateModalOpen(true)}
           >
-            <motion.div
-              className="relative h-[52px] w-full sm:w-[210px] rounded-full bg-[#3e34ff] overflow-hidden cursor-pointer max-w-sm"
-              whileHover={{ scale: 1.05, boxShadow: "0px 8px 40px rgba(62,52,255,0.8)" }}
-              whileTap={{ scale: 0.98 }}
-              transition={{ duration: 0.2 }}
-              onClick={() => setIsCreateModalOpen(true)}
-            >
-              <div className="flex flex-row items-center justify-center gap-2.5 h-full w-full px-4 py-1.5">
-                <p className="font-semibold text-[16px] text-white whitespace-pre leading-normal">
-                  Create Room
-                </p>
-              </div>
-              <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_4px_4px_rgba(255,255,255,0.25)] rounded-full" />
-              <div className="absolute inset-0 pointer-events-none rounded-full border border-[#3e34ff] shadow-[0px_4px_30px_rgba(62,52,255,0.6),0px_0px_0px_4px_rgba(62,52,255,0.1)]" />
-            </motion.div>
+            <div className="flex flex-row items-center justify-center gap-2.5 h-full w-full px-4 py-1.5">
+              <p className="font-semibold text-[16px] text-white whitespace-pre leading-normal">
+                Create Room
+              </p>
+            </div>
+            <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_4px_4px_rgba(255,255,255,0.25)] rounded-full" />
+            <div className="absolute inset-0 pointer-events-none rounded-full border border-[#3e34ff] shadow-[0px_4px_30px_rgba(62,52,255,0.6),0px_0px_0px_4px_rgba(62,52,255,0.1)]" />
           </motion.div>
 
+          {/* Join Room Button */}
           <motion.button
+            className="bg-gray-800 h-[52px] w-full sm:w-[210px] relative rounded-full overflow-hidden cursor-pointer max-w-sm"
             whileHover={{ scale: 1.05, boxShadow: "0px 8px 30px rgba(255,255,255,0.3)" }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => setIsJoinModalOpen(true)}
             transition={{ duration: 0.2 }}
-            className="bg-gray-800 h-[52px] w-full sm:w-[210px] relative rounded-full overflow-hidden cursor-pointer max-w-sm"
+            onClick={() => setIsJoinModalOpen(true)}
           >
             <div className="flex flex-row items-center justify-center gap-2.5 h-full w-full px-4 py-1.5">
               <p className="font-semibold text-[16px] text-white whitespace-pre leading-normal">
@@ -118,7 +118,7 @@ const Hero: React.FC = () => {
             </div>
             <div className="absolute inset-0 pointer-events-none rounded-full border-2 border-gray-500 shadow-[0px_4px_20px_rgba(255,255,255,0.1),0px_0px_0px_4px_rgba(255,255,255,0.1)]" />
           </motion.button>
-        </div>
+        </motion.div>
 
       </motion.div>
 
