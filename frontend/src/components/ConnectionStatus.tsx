@@ -28,7 +28,7 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
         if (isReconnecting) return 'text-yellow-400';
         if (connectionState === 'connected' && iceConnectionState === 'connected') return 'text-green-400';
         if (connectionState === 'failed' || iceConnectionState === 'failed') return 'text-red-400';
-        if (connectionState === 'connecting' || iceConnectionState === 'connecting') return 'text-blue-400';
+        if (connectionState === 'connecting' || iceConnectionState === 'checking') return 'text-blue-400';
         return 'text-gray-400';
     };
 
@@ -36,7 +36,7 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
         if (isReconnecting) return <RotateCcw size={16} className="animate-spin" />;
         if (connectionState === 'connected' && iceConnectionState === 'connected') return <CheckCircle size={16} />;
         if (connectionState === 'failed' || iceConnectionState === 'failed') return <WifiOff size={16} />;
-        if (connectionState === 'connecting' || iceConnectionState === 'connecting') return <Wifi size={16} className="animate-pulse" />;
+        if (connectionState === 'connecting' || iceConnectionState === 'checking') return <Wifi size={16} className="animate-pulse" />;
         return <AlertTriangle size={16} />;
     };
 
@@ -44,7 +44,7 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
         if (isReconnecting) return 'Reconnecting...';
         if (connectionState === 'connected' && iceConnectionState === 'connected') return 'Connected';
         if (connectionState === 'failed' || iceConnectionState === 'failed') return 'Connection Failed';
-        if (connectionState === 'connecting' || iceConnectionState === 'connecting') return 'Connecting...';
+        if (connectionState === 'connecting' || iceConnectionState === 'checking') return 'Connecting...';
         return 'Disconnected';
     };
 

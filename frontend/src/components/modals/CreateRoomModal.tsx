@@ -96,7 +96,7 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom
         exit={{ scale: 0.95, opacity: 0 }}
         transition={{ duration: 0.2 }}
         className="bg-gray-900 rounded-xl border border-gray-800 p-6 max-w-md w-full shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: React.MouseEvent<HTMLDivElement, MouseEvent>) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold text-white">Create a new room</h2>
@@ -141,7 +141,7 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ onClose, onCreateRoom
               placeholder="Enter your name"
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               required
-              disabled={isAuthenticated && user}
+              disabled={!!(isAuthenticated && user)}
             />
             {isAuthenticated && user && (
               <p className="mt-1 text-xs text-green-400">✓ Signed in as {user.username}</p>
