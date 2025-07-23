@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import CreateRoomModal from './modals/CreateRoomModal';
 import JoinRoomModal from './modals/JoinRoomModal';
 import Notification from "./Notification";
-import light from '../assets/light.png';
+import light from '../assets/light.webp';
 import Navbar from './Navbar';
 
 const FloatingParticles = () => {

@@ -12,7 +12,7 @@ import { useRecordingAuth } from '../hooks/useAuthMiddleware';
 import { AuthRequestModal } from '../components/modals/AuthRequestModal';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserDisplayName } from '../utils/guestUtils';
-import light from '../assets/light.png';
+import light from '../assets/light.webp';
 
 function useQuery() {
   return new URLSearchParams(useLocation().search);
