@@ -2,7 +2,6 @@
 package db
 
 import (
-	"embed"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -15,8 +14,9 @@ import (
 	"gorm.io/gorm"
 )
 
-//go:embed migrations/*.sql
-var embeddedMigrations embed.FS
+import "seaside/lib/migrations"
+
+var embeddedMigrations = migrations.EmbeddedMigrations
 
 // MigrationRecord tracks which migrations have been run
 type MigrationRecord struct {
@@ -171,7 +171,7 @@ func (mr *MigrationRunner) getMigrationFiles() ([]string, error) {
 
 // getEmbeddedMigrationFiles reads migration files from embedded filesystem
 func (mr *MigrationRunner) getEmbeddedMigrationFiles() ([]string, error) {
-	entries, err := embeddedMigrations.ReadDir("migrations")
+	entries, err := embeddedMigrations.ReadDir(".")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read embedded migrations directory: %w", err)
 	}
@@ -252,7 +252,7 @@ func (mr *MigrationRunner) runMigration(filename string) error {
 	// Check if we're using embedded migrations
 	if mr.migrationsDir == "embedded" {
 		log.Printf("Executing embedded migration file: %s", filename)
-		content, err = embeddedMigrations.ReadFile(filepath.Join("migrations", filename))
+		content, err = embeddedMigrations.ReadFile(filename)
 		if err != nil {
 			return fmt.Errorf("failed to read embedded migration file %s: %w\n\nThis indicates an issue with the embedded migration files in the binary.\n\nTroubleshooting:\n- Ensure the migration file was properly embedded during build\n- Check that the file exists in the migrations/ directory in source code\n- Verify the embed directive is correct\n- Rebuild the application to refresh embedded files", filename, err)
 		}
