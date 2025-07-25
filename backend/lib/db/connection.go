@@ -104,7 +104,7 @@ func ConnectDatabase() (*gorm.DB, error) {
 		log.Printf("❌ Failed to open database connection: %v", err)
 		
 		// Provide specific error guidance based on common connection issues
-		errorMsg := fmt.Sprintf("failed to connect to database: %w\n\nCommon connection issues:\n", err)
+		errorMsg := fmt.Sprintf("failed to connect to database: %v\n\nCommon connection issues:\n", err)
 		
 		errorStr := err.Error()
 		if strings.Contains(errorStr, "connection refused") {
@@ -121,7 +121,7 @@ func ConnectDatabase() (*gorm.DB, error) {
 		
 		errorMsg += "\n\nDeployment troubleshooting:\n- For Render: Check if database service is running\n- For local development: Ensure PostgreSQL is installed and running\n- Test connection manually with psql or database client"
 		
-		return nil, fmt.Errorf(errorMsg)
+		return nil, fmt.Errorf("%s", errorMsg)
 	}
 	log.Println("✅ Database connection opened successfully")
 
@@ -143,7 +143,7 @@ func ConnectDatabase() (*gorm.DB, error) {
 	if err := sqlDB.Ping(); err != nil {
 		log.Printf("❌ Database ping failed: %v", err)
 		
-		errorMsg := fmt.Sprintf("failed to ping database: %w\n\nConnection established but ping failed. This usually indicates:\n", err)
+		errorMsg := fmt.Sprintf("failed to ping database: %v\n\nConnection established but ping failed. This usually indicates:\n", err)
 		
 		errorStr := err.Error()
 		if strings.Contains(errorStr, "connection") && strings.Contains(errorStr, "closed") {
@@ -156,7 +156,7 @@ func ConnectDatabase() (*gorm.DB, error) {
 		
 		errorMsg += "\n\nTroubleshooting:\n- Check database server status and logs\n- Verify network connectivity\n- Try connecting with a database client\n- For cloud databases: Check service status dashboard"
 		
-		return nil, fmt.Errorf(errorMsg)
+		return nil, fmt.Errorf("%s", errorMsg)
 	}
 	log.Println("✅ Database ping successful - connection is healthy")
 

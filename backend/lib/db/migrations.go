@@ -2,6 +2,7 @@
 package db
 
 import (
+	"embed"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -13,6 +14,9 @@ import (
 
 	"gorm.io/gorm"
 )
+
+//go:embed migrations/*.sql
+var embeddedMigrations embed.FS
 
 // MigrationRecord tracks which migrations have been run
 type MigrationRecord struct {
@@ -110,9 +114,23 @@ func (mr *MigrationRunner) RunMigrations() error {
 }
 
 // getMigrationFiles returns sorted list of migration files
-// Tries multiple path strategies to locate migration files in different deployment contexts
+// First tries embedded files, then falls back to file system paths
 func (mr *MigrationRunner) getMigrationFiles() ([]string, error) {
-	// Define multiple path strategies to try
+	// Strategy 1: Try embedded migration files first (most reliable for deployments)
+	log.Println("Attempting to read embedded migration files...")
+	if embeddedFiles, err := mr.getEmbeddedMigrationFiles(); err == nil && len(embeddedFiles) > 0 {
+		log.Printf("✅ Successfully found %d embedded migration files", len(embeddedFiles))
+		log.Println("Using embedded migrations (recommended for production deployments)")
+		mr.migrationsDir = "embedded" // Mark as using embedded files
+		return embeddedFiles, nil
+	} else if err != nil {
+		log.Printf("Failed to read embedded migration files: %v", err)
+	} else {
+		log.Println("No embedded migration files found")
+	}
+	
+	// Strategy 2: Fall back to file system paths
+	log.Println("Falling back to file system migration files...")
 	pathStrategies := mr.getMigrationPathStrategies()
 	
 	var lastErr error
@@ -147,8 +165,26 @@ func (mr *MigrationRunner) getMigrationFiles() ([]string, error) {
 		log.Printf("No migration files found in: %s", path)
 	}
 	
-	// If we get here, none of the paths worked
-	return nil, fmt.Errorf("failed to locate migration files after trying %d paths.\n\nAttempted paths:\n%s\n\nLast error: %w\n\nCommon deployment scenarios:\n- Render/Heroku: Ensure migration files are included in build\n- Docker: Verify COPY commands include migration directory\n- Local development: Run from project root directory\n- Custom deployment: Set MIGRATIONS_DIR environment variable\n\nCurrent context:\n- Working directory: %s\n- Executable location: %s\n- MIGRATIONS_DIR env var: %s", len(attemptedPaths), formatPathList(attemptedPaths), lastErr, getCurrentWorkingDir(), getExecutableDir(), getEnvOrDefault("MIGRATIONS_DIR", "not set"))
+	// If we get here, none of the strategies worked
+	return nil, fmt.Errorf("failed to locate migration files after trying embedded files and %d file system paths.\n\nAttempted paths:\n%s\n\nLast error: %w\n\nCommon deployment scenarios:\n- Render/Heroku: Migration files should be embedded in binary (this is now automatic)\n- Docker: Verify COPY commands include migration directory\n- Local development: Run from project root directory\n- Custom deployment: Set MIGRATIONS_DIR environment variable\n\nCurrent context:\n- Working directory: %s\n- Executable location: %s\n- MIGRATIONS_DIR env var: %s\n\nNote: This application now includes embedded migration files for reliable deployments.", len(attemptedPaths), formatPathList(attemptedPaths), lastErr, getCurrentWorkingDir(), getExecutableDir(), getEnvOrDefault("MIGRATIONS_DIR", "not set"))
+}
+
+// getEmbeddedMigrationFiles reads migration files from embedded filesystem
+func (mr *MigrationRunner) getEmbeddedMigrationFiles() ([]string, error) {
+	entries, err := embeddedMigrations.ReadDir("migrations")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read embedded migrations directory: %w", err)
+	}
+	
+	var migrationFiles []string
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+			migrationFiles = append(migrationFiles, entry.Name())
+		}
+	}
+	
+	sort.Strings(migrationFiles)
+	return migrationFiles, nil
 }
 
 // getMigrationPathStrategies returns a list of paths to try for finding migration files
@@ -210,16 +246,33 @@ func (mr *MigrationRunner) GetMigrationFiles() ([]string, error) {
 
 // runMigration executes an entire migration file as a single statement
 func (mr *MigrationRunner) runMigration(filename string) error {
-	filePath := filepath.Join(mr.migrationsDir, filename)
-	log.Printf("Executing migration file: %s", filePath)
+	var content []byte
+	var err error
 	
-	content, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read migration file %s: %w\n\nFile path attempted: %s\n\nCommon deployment scenarios:\n- File missing from build: Migration files not included in deployment package\n- Permission issues: File system permissions deny read access\n- Path resolution: File exists but at different location than expected\n- Container deployment: Files not copied to correct location in image\n\nTroubleshooting:\n- Verify file exists at expected path: %s\n- Check file permissions (should be readable)\n- For Docker: Ensure COPY command includes migration files\n- For cloud deployment: Verify build includes migration directory\n- Check if file was renamed or moved", filePath, err, filePath, filePath)
+	// Check if we're using embedded migrations
+	if mr.migrationsDir == "embedded" {
+		log.Printf("Executing embedded migration file: %s", filename)
+		content, err = embeddedMigrations.ReadFile(filepath.Join("migrations", filename))
+		if err != nil {
+			return fmt.Errorf("failed to read embedded migration file %s: %w\n\nThis indicates an issue with the embedded migration files in the binary.\n\nTroubleshooting:\n- Ensure the migration file was properly embedded during build\n- Check that the file exists in the migrations/ directory in source code\n- Verify the embed directive is correct\n- Rebuild the application to refresh embedded files", filename, err)
+		}
+	} else {
+		// Use file system path
+		filePath := filepath.Join(mr.migrationsDir, filename)
+		log.Printf("Executing migration file: %s", filePath)
+		
+		content, err = ioutil.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to read migration file %s: %w\n\nFile path attempted: %s\n\nCommon deployment scenarios:\n- File missing from build: Migration files not included in deployment package\n- Permission issues: File system permissions deny read access\n- Path resolution: File exists but at different location than expected\n- Container deployment: Files not copied to correct location in image\n\nTroubleshooting:\n- Verify file exists at expected path: %s\n- Check file permissions (should be readable)\n- For Docker: Ensure COPY command includes migration files\n- For cloud deployment: Verify build includes migration directory\n- Check if file was renamed or moved", filePath, err, filePath, filePath)
+		}
 	}
 
 	if len(content) == 0 {
-		return fmt.Errorf("migration file %s is empty. Migration files must contain valid SQL statements.\n\nFile path: %s\n\nCommon causes:\n- File was created but never populated with SQL\n- File corruption during deployment\n- Incomplete file transfer\n- Build process stripped file contents\n\nTroubleshooting:\n- Verify the source migration file contains SQL statements\n- Check if file was properly copied during deployment\n- Ensure build process preserves file contents", filePath, filePath)
+		source := filename
+		if mr.migrationsDir != "embedded" {
+			source = filepath.Join(mr.migrationsDir, filename)
+		}
+		return fmt.Errorf("migration file %s is empty. Migration files must contain valid SQL statements.\n\nFile source: %s\n\nCommon causes:\n- File was created but never populated with SQL\n- File corruption during deployment\n- Incomplete file transfer\n- Build process stripped file contents\n\nTroubleshooting:\n- Verify the source migration file contains SQL statements\n- Check if file was properly copied during deployment\n- Ensure build process preserves file contents", filename, source)
 	}
 
 	sqlDB, err := mr.db.DB()
@@ -237,7 +290,11 @@ func (mr *MigrationRunner) runMigration(filename string) error {
 	log.Printf("Executing SQL from %s (length: %d bytes)", filename, len(content))
 	
 	if _, err := tx.Exec(stmt); err != nil {
-		return fmt.Errorf("failed to execute SQL in migration %s: %w\n\nMigration file: %s\nSQL execution failed.\n\nCommon deployment scenarios:\n- Schema conflicts: Objects already exist from previous deployment\n- Data type mismatches: Incompatible with target database version\n- Foreign key violations: Referenced tables/data missing\n- Index conflicts: Duplicate or conflicting indexes\n- Permission denied: User lacks required database privileges\n\nTroubleshooting:\n- Check SQL syntax for target database type\n- Verify all dependencies exist (tables, columns, etc.)\n- Review constraint violations with existing data\n- Ensure database user has required privileges (CREATE, ALTER, DROP, INSERT)\n- Test migration on staging environment with production-like data\n- Check database version compatibility\n\nSQL content preview (first 200 chars):\n%s", filename, err, filepath.Join(mr.migrationsDir, filename), truncateString(stmt, 200))
+		source := filename
+		if mr.migrationsDir != "embedded" {
+			source = filepath.Join(mr.migrationsDir, filename)
+		}
+		return fmt.Errorf("failed to execute SQL in migration %s: %w\n\nMigration source: %s\nSQL execution failed.\n\nCommon deployment scenarios:\n- Schema conflicts: Objects already exist from previous deployment\n- Data type mismatches: Incompatible with target database version\n- Foreign key violations: Referenced tables/data missing\n- Index conflicts: Duplicate or conflicting indexes\n- Permission denied: User lacks required database privileges\n\nTroubleshooting:\n- Check SQL syntax for target database type\n- Verify all dependencies exist (tables, columns, etc.)\n- Review constraint violations with existing data\n- Ensure database user has required privileges (CREATE, ALTER, DROP, INSERT)\n- Test migration on staging environment with production-like data\n- Check database version compatibility\n\nSQL content preview (first 200 chars):\n%s", filename, err, source, truncateString(stmt, 200))
 	}
 
 	// Record the migration as applied
