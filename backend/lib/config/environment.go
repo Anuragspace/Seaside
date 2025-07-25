@@ -219,8 +219,15 @@ func (dc *DeploymentConfig) generateMigrationPaths() []string {
 	// Platform-specific migration paths
 	switch dc.Platform {
 	case "render":
+		// Render deployment paths - try multiple common patterns
 		paths = append(paths, "/opt/render/project/src/migrations")
 		paths = append(paths, "/opt/render/project/src/backend/migrations")
+		paths = append(paths, "/opt/render/project/go/src/github.com/Anuragspace/Seaside/migrations")
+		paths = append(paths, "/opt/render/project/go/src/github.com/Anuragspace/Seaside/backend/migrations")
+		// Try relative to current working directory on Render
+		if strings.Contains(dc.WorkingDir, "/opt/render/project") {
+			paths = append(paths, filepath.Join(filepath.Dir(dc.WorkingDir), "migrations"))
+		}
 	case "heroku":
 		paths = append(paths, "/app/migrations")
 		paths = append(paths, "/app/backend/migrations")
@@ -241,6 +248,16 @@ func (dc *DeploymentConfig) generateMigrationPaths() []string {
 	if dc.WorkingDir != "" {
 		paths = append(paths, filepath.Join(dc.WorkingDir, "migrations"))
 		paths = append(paths, filepath.Join(dc.WorkingDir, "backend", "migrations"))
+		
+		// For Render: if working dir ends with /backend, try migrations in same directory
+		if strings.HasSuffix(dc.WorkingDir, "/backend") {
+			paths = append(paths, filepath.Join(dc.WorkingDir, "migrations"))
+		}
+		
+		// Try parent directory migrations (common in nested deployments)
+		parentDir := filepath.Dir(dc.WorkingDir)
+		paths = append(paths, filepath.Join(parentDir, "migrations"))
+		paths = append(paths, filepath.Join(parentDir, "backend", "migrations"))
 	}
 	
 	// Executable directory relative paths
@@ -292,6 +309,14 @@ func (dc *DeploymentConfig) FindMigrationDirectory() (string, error) {
 				return path, nil
 			}
 			log.Printf("Directory exists but contains no .sql files: %s", path)
+		}
+	}
+	
+	// Additional strategy: walk up directory tree looking for migrations
+	if dc.WorkingDir != "" {
+		if migrationDir := dc.findMigrationsByWalking(dc.WorkingDir); migrationDir != "" {
+			log.Printf("Found migration directory by walking up tree: %s", migrationDir)
+			return migrationDir, nil
 		}
 	}
 	
@@ -394,6 +419,36 @@ func removeDuplicatePaths(paths []string) []string {
 	}
 	
 	return unique
+}
+
+// findMigrationsByWalking walks up the directory tree looking for migrations directory
+func (dc *DeploymentConfig) findMigrationsByWalking(startDir string) string {
+	currentDir := startDir
+	maxLevels := 5 // Prevent infinite loops
+	
+	for i := 0; i < maxLevels; i++ {
+		// Try migrations in current directory
+		migrationPath := filepath.Join(currentDir, "migrations")
+		if dirExists(migrationPath) && hasSQLFiles(migrationPath) {
+			return migrationPath
+		}
+		
+		// Try backend/migrations in current directory
+		backendMigrationPath := filepath.Join(currentDir, "backend", "migrations")
+		if dirExists(backendMigrationPath) && hasSQLFiles(backendMigrationPath) {
+			return backendMigrationPath
+		}
+		
+		// Move up one directory
+		parentDir := filepath.Dir(currentDir)
+		if parentDir == currentDir {
+			// Reached root directory
+			break
+		}
+		currentDir = parentDir
+	}
+	
+	return ""
 }
 
 func formatPathList(paths []string) string {

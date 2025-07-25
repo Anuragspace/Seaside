@@ -614,3 +614,54 @@ func TestMigrationPathErrorMessages(t *testing.T) {
 		t.Error("Error message should include troubleshooting section")
 	}
 }
+
+func TestFindMigrationsByWalking(t *testing.T) {
+	// Create temporary directory structure
+	tempDir, err := ioutil.TempDir("", "walking_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create nested structure: tempDir/project/backend/
+	projectDir := filepath.Join(tempDir, "project")
+	backendDir := filepath.Join(projectDir, "backend")
+	migrationDir := filepath.Join(projectDir, "backend", "migrations")
+	
+	if err := os.MkdirAll(migrationDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	
+	// Create test SQL file
+	sqlFile := filepath.Join(migrationDir, "001_test.sql")
+	if err := ioutil.WriteFile(sqlFile, []byte("CREATE TABLE test;"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("finds migrations by walking up from nested directory", func(t *testing.T) {
+		config := &DeploymentConfig{
+			WorkingDir: backendDir,
+		}
+		
+		found := config.findMigrationsByWalking(backendDir)
+		if found != migrationDir {
+			t.Errorf("findMigrationsByWalking() = %v, want %v", found, migrationDir)
+		}
+	})
+
+	t.Run("returns empty string when no migrations found", func(t *testing.T) {
+		emptyDir := filepath.Join(tempDir, "empty")
+		if err := os.MkdirAll(emptyDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		
+		config := &DeploymentConfig{
+			WorkingDir: emptyDir,
+		}
+		
+		found := config.findMigrationsByWalking(emptyDir)
+		if found != "" {
+			t.Errorf("findMigrationsByWalking() = %v, want empty string", found)
+		}
+	})
+}
