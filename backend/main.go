@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"seaside/handlers"
@@ -11,6 +12,7 @@ import (
 	"seaside/internals/middleware"
 	"seaside/internals/video"
 	"seaside/lib/auth"
+	"seaside/lib/config"
 	"seaside/lib/db"
 
 	"github.com/gofiber/fiber/v2"
@@ -21,6 +23,66 @@ import (
 	"github.com/gofiber/websocket/v2"
 	"github.com/joho/godotenv"
 )
+
+// logEnvironmentStatus logs the status of key environment variables
+func logEnvironmentStatus() {
+	envVars := map[string]string{
+		"PORT":         os.Getenv("PORT"),
+		"DATABASE_URL": os.Getenv("DATABASE_URL"),
+		"JWT_SECRET":   os.Getenv("JWT_SECRET"),
+		"GOOGLE_CLIENT_ID": os.Getenv("GOOGLE_CLIENT_ID"),
+		"GOOGLE_CLIENT_SECRET": os.Getenv("GOOGLE_CLIENT_SECRET"),
+		"GITHUB_CLIENT_ID": os.Getenv("GITHUB_CLIENT_ID"),
+		"GITHUB_CLIENT_SECRET": os.Getenv("GITHUB_CLIENT_SECRET"),
+	}
+
+	log.Println("Environment variable status:")
+	for key, value := range envVars {
+		if value != "" {
+			// Don't log sensitive values, just indicate they're set
+			if key == "JWT_SECRET" || key == "DATABASE_URL" || 
+			   key == "GOOGLE_CLIENT_SECRET" || key == "GITHUB_CLIENT_SECRET" {
+				log.Printf("  ✅ %s: [SET]", key)
+			} else {
+				log.Printf("  ✅ %s: %s", key, value)
+			}
+		} else {
+			log.Printf("  ❌ %s: [NOT SET]", key)
+		}
+	}
+}
+
+// validateRequiredEnvironmentVariables checks that all critical environment variables are set
+func validateRequiredEnvironmentVariables() error {
+	requiredVars := map[string]string{
+		"DATABASE_URL": "Database connection string is required for application to function",
+		"JWT_SECRET":   "JWT secret is required for authentication to work",
+	}
+
+	var missingVars []string
+	var errorMessages []string
+
+	log.Println("Validating required environment variables...")
+	
+	for key, description := range requiredVars {
+		value := os.Getenv(key)
+		if value == "" {
+			missingVars = append(missingVars, key)
+			errorMessages = append(errorMessages, fmt.Sprintf("- %s: %s", key, description))
+			log.Printf("❌ Required variable %s is missing", key)
+		} else {
+			log.Printf("✅ Required variable %s is set", key)
+		}
+	}
+
+	if len(missingVars) > 0 {
+		errorMsg := fmt.Sprintf("Missing required environment variables:\n%s\n\nDeployment troubleshooting:\n- For Render: Set these variables in the Environment section of your service\n- For local development: Add these to your .env file\n- For Docker: Pass these as -e flags or in docker-compose.yml\n- For other platforms: Consult your platform's documentation for setting environment variables", strings.Join(errorMessages, "\n"))
+		return fmt.Errorf(errorMsg)
+	}
+
+	log.Println("✅ All required environment variables are present")
+	return nil
+}
 
 func setupRoutes(app *fiber.App, authHandlers *handlers.AuthHandlers, jwtUtil *auth.JWTUtil) {
 	video.AllRooms.Init()
@@ -179,29 +241,70 @@ func setupRoutes(app *fiber.App, authHandlers *handlers.AuthHandlers, jwtUtil *a
 }
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Println("Error loading .env file:", err)
+	log.Println("=== Seaside Application Startup ===")
+	log.Printf("Starting Seaside Clone v1.0.2 at %s", time.Now().Format(time.RFC3339))
+	
+	// Step 1: Initialize deployment-specific configuration
+	log.Println("Step 1: Initializing deployment configuration...")
+	deploymentConfig := config.NewDeploymentConfig()
+	
+	// Step 2: Load environment configuration with deployment-specific handling
+	log.Println("Step 2: Loading environment configuration...")
+	if deploymentConfig.ShouldLoadEnvFile() {
+		// Try to find and load environment-specific .env file
+		if envFile, err := deploymentConfig.FindConfigFile(".env"); err == nil {
+			log.Printf("Attempting to load environment file: %s", envFile)
+			if err := godotenv.Load(envFile); err != nil {
+				log.Printf("Warning: Could not load .env file from %s (%v). Using system environment variables.", envFile, err)
+			} else {
+				log.Printf("Successfully loaded .env file from: %s", envFile)
+			}
+		} else {
+			log.Printf("Warning: No .env file found using deployment-specific paths (%v). Using system environment variables.", err)
+		}
+	} else {
+		log.Printf("Skipping .env file loading for %s platform - using system environment variables", deploymentConfig.Platform)
 	}
 
-	// Initialize database
-	if err := db.InitializeDatabase(); err != nil {
-		log.Fatalf("Error connecting to database: %v", err)
+	// Log key environment variables being used (without sensitive values)
+	logEnvironmentStatus()
+
+	// Validate required environment variables before proceeding
+	if err := validateRequiredEnvironmentVariables(); err != nil {
+		log.Fatalf("Environment validation failed: %v", err)
 	}
 
+	// Initialize database with deployment configuration
+	log.Println("Step 3: Initializing database connection...")
+	if err := db.InitializeDatabaseWithConfig(deploymentConfig); err != nil {
+		log.Fatalf("❌ Database initialization failed: %v", err)
+	}
+	log.Println("✅ Database initialization completed successfully")
+
+	// Step 4: Initialize application components
+	log.Println("Step 4: Initializing application components...")
+	
 	// Create repository
+	log.Println("Creating user repository...")
 	userRepo := db.NewUserRepository(db.DB)
+	log.Println("✅ User repository created")
 
 	// Create JWT utility
+	log.Println("Initializing JWT utility...")
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		log.Fatal("JWT_SECRET environment variable is required")
+		log.Fatal("❌ JWT_SECRET environment variable is required")
 	}
 	jwtUtil := auth.NewJWTUtil(jwtSecret)
+	log.Println("✅ JWT utility initialized")
 
 	// Create handlers
+	log.Println("Creating authentication handlers...")
 	authHandlers := handlers.NewAuthHandlers(userRepo, jwtUtil)
+	log.Println("✅ Authentication handlers created")
 
+	// Step 5: Initialize Fiber application
+	log.Println("Step 5: Initializing Fiber web server...")
 	app := fiber.New(fiber.Config{
 		AppName:           "Seaside Clone v1.0.2",
 		DisableKeepalive:  false,
@@ -220,31 +323,49 @@ func main() {
 		},
 	})
 
+	log.Println("✅ Fiber application initialized")
+
+	// Step 6: Configure middleware
+	log.Println("Step 6: Configuring middleware...")
+	
 	// Add recovery middleware
 	app.Use(recover.New())
+	log.Println("✅ Recovery middleware added")
 
 	// Add logger middleware with custom format
 	app.Use(logger.New(logger.Config{
 		Format: "[${time}] ${status} - ${method} ${path} - ${ip} - ${latency}\n",
 	}))
+	log.Println("✅ Request logger middleware added")
 
 	// Add ETag middleware
 	app.Use(etag.New())
+	log.Println("✅ ETag middleware added")
 
 	// Add CORS middleware
 	app.Use(middleware.CorsConfig())
+	log.Println("✅ CORS middleware added")
 
-	// Setup routes
+	// Step 7: Setup application routes
+	log.Println("Step 7: Setting up application routes...")
 	setupRoutes(app, authHandlers, jwtUtil)
+	log.Println("✅ Application routes configured")
 
+	// Step 8: Start server
+	log.Println("Step 8: Starting HTTP server...")
+	
 	// Get port from environment or use default
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	log.Printf("Server starting on port %s", port)
+	log.Printf("🚀 Server starting on port %s", port)
+	log.Printf("🌐 Health check available at: http://localhost:%s/health", port)
+	log.Printf("📊 Stats endpoint available at: http://localhost:%s/stats", port)
+	log.Println("=== Startup Complete - Server Ready ===")
+	
 	if err := app.Listen(":" + port); err != nil {
-		log.Fatalf("Error starting server: %v", err)
+		log.Fatalf("❌ Error starting server: %v", err)
 	}
 }
