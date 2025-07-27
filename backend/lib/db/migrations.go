@@ -125,8 +125,17 @@ func (mr *MigrationRunner) getMigrationFiles() ([]string, error) {
 		return embeddedFiles, nil
 	} else if err != nil {
 		log.Printf("Failed to read embedded migration files: %v", err)
+		log.Println("Common causes for embedded migration failures:")
+		log.Println("- Build issue: Migration files not properly embedded during compilation")
+		log.Println("- Embed directive: Check that //go:embed directive in embedded.go lists all SQL files")
+		log.Println("- File location: Ensure SQL files are in same directory as embedded.go")
+		log.Println("- Build context: Verify build is run from correct directory with access to migration files")
 	} else {
 		log.Println("No embedded migration files found")
+		log.Println("This usually indicates:")
+		log.Println("- Empty embed.FS: The embedded filesystem was created but contains no files")
+		log.Println("- Build configuration: Migration files were not included in the embed directive")
+		log.Println("- File naming: Migration files don't match the expected pattern or location")
 	}
 	
 	// Strategy 2: Fall back to file system paths
@@ -173,7 +182,7 @@ func (mr *MigrationRunner) getMigrationFiles() ([]string, error) {
 func (mr *MigrationRunner) getEmbeddedMigrationFiles() ([]string, error) {
 	entries, err := embeddedMigrations.ReadDir(".")
 	if err != nil {
-		return nil, fmt.Errorf("failed to read embedded migrations directory: %w", err)
+		return nil, fmt.Errorf("failed to read embedded migrations directory: %w\n\nThis error indicates the embedded filesystem is not accessible.\n\nCommon deployment scenarios:\n- Build failure: Migration files were not embedded during compilation\n- Runtime issue: Embedded filesystem corrupted or inaccessible\n- Binary issue: Application binary doesn't contain embedded files\n\nTroubleshooting:\n- Rebuild the application to refresh embedded files\n- Verify //go:embed directive in lib/migrations/embedded.go lists all SQL files explicitly\n- Check that migration files exist in lib/migrations/ directory during build\n- Ensure build process has access to migration files\n- For deployment: Verify build environment includes all source files", err)
 	}
 	
 	var migrationFiles []string
@@ -181,6 +190,10 @@ func (mr *MigrationRunner) getEmbeddedMigrationFiles() ([]string, error) {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
 			migrationFiles = append(migrationFiles, entry.Name())
 		}
+	}
+	
+	if len(migrationFiles) == 0 {
+		return nil, fmt.Errorf("embedded filesystem accessible but contains no .sql files\n\nThis indicates:\n- Embed directive issue: //go:embed pattern didn't match any files during build\n- File naming: Migration files don't have .sql extension\n- Build context: Files weren't available in expected location during compilation\n\nTroubleshooting:\n- Check lib/migrations/embedded.go has correct //go:embed directive\n- Verify migration files exist in lib/migrations/ and have .sql extension\n- Ensure build is run from project root directory\n- List embedded files explicitly in embed directive instead of using wildcards\n- Example: //go:embed 001_initial_schema.sql 002_add_indexes.sql")
 	}
 	
 	sort.Strings(migrationFiles)
