@@ -36,6 +36,7 @@ backend/test_dbmanager
 # Database backups and data
 backups/
 *.sql
+!backend/lib/migrations/*.sql
 *.db
 *.sqlite
 *.sqlite3
