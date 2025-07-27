@@ -7,13 +7,13 @@
   - _Requirements: 1.1, 1.2, 1.3_
 
 - [x] 2. Enhance migration path resolution
-  - [ ] 2.1 Update migration runner to try multiple path strategies
+  - [x] 2.1 Update migration runner to try multiple path strategies
     - Modify getMigrationFiles() to try multiple directory paths
     - Add path resolution logic that works in different deployment contexts
     - Log all attempted paths for debugging purposes
     - _Requirements: 2.1, 2.2, 3.3_
 
-  - [ ] 2.2 Improve error messages in migration system
+  - [x] 2.2 Improve error messages in migration system
     - Update error messages to include attempted paths
     - Add specific error handling for common deployment scenarios
     - Provide actionable error messages for troubleshooting
