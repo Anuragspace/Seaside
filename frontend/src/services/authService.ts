@@ -15,7 +15,7 @@ export interface AvatarUploadResponse {
 }
 
 // API endpoints configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
 
 const API_ENDPOINTS = {
   login: `${API_BASE_URL}/auth/login`,
@@ -50,7 +50,7 @@ export class AuthService {
   static {
     TokenManager.setRefreshCallback(async () => {
       const refreshToken = TokenManager.getRefreshToken();
-      
+
       if (!refreshToken) {
         throw new Error('No refresh token available');
       }
@@ -86,7 +86,7 @@ export class AuthService {
   ): Promise<T> {
     // Get valid access token (will refresh if needed)
     const accessToken = await TokenManager.getValidAccessToken();
-    
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
@@ -116,7 +116,7 @@ export class AuthService {
       if (error instanceof AuthError) {
         throw error;
       }
-      
+
       // Handle network errors
       throw new AuthError(
         'Network error occurred. Please check your connection.',
@@ -232,7 +232,7 @@ export class AuthService {
    */
   static async refreshToken(): Promise<AuthResponse> {
     const refreshToken = TokenManager.getRefreshToken();
-    
+
     if (!refreshToken) {
       throw new AuthError('No refresh token available', 401, 'NO_REFRESH_TOKEN');
     }
@@ -257,7 +257,7 @@ export class AuthService {
     } catch (error) {
       // Clear tokens if refresh fails
       TokenManager.clearTokens();
-      
+
       if (error instanceof AuthError) {
         throw error;
       }
@@ -299,7 +299,7 @@ export class AuthService {
         // Token might be expired, clear it
         TokenManager.clearTokens();
       }
-      
+
       if (error instanceof AuthError) {
         throw error;
       }
@@ -400,7 +400,7 @@ export class AuthService {
 
       // Get valid access token
       const accessToken = await TokenManager.getValidAccessToken();
-      
+
       const headers: Record<string, string> = {};
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;

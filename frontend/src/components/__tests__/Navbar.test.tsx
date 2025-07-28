@@ -82,7 +82,7 @@ describe('Navbar Component', () => {
   describe('Unauthenticated State', () => {
     beforeEach(() => {
       vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
-        ...mockAuthContextValue,
+        ..mockAuthContextValue,
         isAuthenticated: false,
         isLoading: false
       });
