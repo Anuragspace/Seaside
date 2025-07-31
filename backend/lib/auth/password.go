@@ -76,10 +76,10 @@ func (p *PasswordUtil) GenerateRandomPassword(length int) string {
 	password := make([]byte, length)
 
 	// Ensure at least one character from each required category
-	password[0] = 'A' // uppercase
-	password[1] = 'a' // lowercase
-	password[2] = '1' // digit
-	password[3] = '!' // special
+	password[0] = 'A' 
+	password[1] = 'a' 
+	password[2] = '1' 
+	password[3] = '!' 
 
 	// Fill the rest randomly
 	for i := 4; i < length; i++ {

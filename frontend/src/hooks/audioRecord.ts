@@ -63,10 +63,10 @@ export function stopRecording(): void {
 
 // Session monitoring for authentication during recording
 function startSessionMonitoring(): void {
-    // Check session every 30 seconds during recording
+    // Check session every 5 minutes during recording
     sessionCheckInterval = setInterval(() => {
         checkSessionDuringRecording();
-    }, 30000);
+    }, 5 * 60 * 1000); // 5 minutes
 }
 
 function stopSessionMonitoring(): void {

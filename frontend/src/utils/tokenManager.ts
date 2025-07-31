@@ -84,8 +84,8 @@ export class TokenManager {
       const expiry = parseInt(expiryTime, 10);
       const now = Date.now();
       
-      // Add 5 minute buffer to refresh token before actual expiry
-      const bufferTime = 5 * 60 * 1000; // 5 minutes in milliseconds
+      // Add 30 second buffer to refresh token before actual expiry
+      const bufferTime = 30 * 1000; // 30 seconds in milliseconds
       return now >= (expiry - bufferTime);
     } catch (error) {
       console.error('Error checking token expiry:', error);
@@ -283,8 +283,8 @@ export class TokenManager {
       return;
     }
 
-    // Schedule refresh 5 minutes before expiry
-    const bufferTime = 5 * 60 * 1000; // 5 minutes
+    // Schedule refresh 1 minute before expiry
+    const bufferTime = 60 * 1000; // 1 minute
     const refreshTime = Math.max(0, timeUntilExpiry - bufferTime);
 
     setTimeout(async () => {

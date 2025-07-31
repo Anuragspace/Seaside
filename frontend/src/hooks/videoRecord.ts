@@ -116,10 +116,10 @@ export function stopVideoRecording() {
 
 // Session monitoring for authentication during recording
 function startSessionMonitoring(): void {
-    // Check session every 30 seconds during recording
+    // Check session every 5 minutes during recording
     sessionCheckInterval = setInterval(() => {
         checkSessionDuringRecording();
-    }, 30000);
+    }, 5 * 60 * 1000); // 5 minutes
 }
 
 function stopSessionMonitoring(): void {
@@ -133,12 +133,12 @@ async function checkSessionDuringRecording(): Promise<void> {
     try {
         // Import TokenManager dynamically to avoid circular dependencies
         const { TokenManager } = await import('../utils/tokenManager');
-        
+
         // If token is expired and we're recording, stop recording
         if (!TokenManager.hasValidTokens() && videoRecorder && videoRecorder.state === 'recording') {
             console.warn('Session expired during video recording, stopping recording');
             stopVideoRecording();
-            
+
             // Dispatch custom event to notify UI components
             window.dispatchEvent(new CustomEvent('recording-session-expired', {
                 detail: { type: 'video' }
@@ -169,7 +169,7 @@ export function startVideoRecordingWithAuth(onAuthRequired?: () => void): boolea
             }
             return false;
         }
-        
+
         // Start recording if authenticated
         startVideoRecording();
         return true;

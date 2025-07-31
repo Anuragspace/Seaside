@@ -27,14 +27,14 @@ func NewJWTUtil(secretKey string) *JWTUtil {
 
 // GenerateTokens generates both access and refresh tokens
 func (j *JWTUtil) GenerateTokens(userID uint, email string) (accessToken, refreshToken string, err error) {
-	// Generate access token (15 minutes)
-	accessToken, err = j.generateToken(userID, email, "access", 15*time.Minute)
+	// Generate access token (48 hours - increased from 24 hours)
+	accessToken, err = j.generateToken(userID, email, "access", 48*time.Hour)
 	if err != nil {
 		return "", "", err
 	}
 
-	// Generate refresh token (7 days)
-	refreshToken, err = j.generateToken(userID, email, "refresh", 7*24*time.Hour)
+	// Generate refresh token (180 days - increased from 90 days)
+	refreshToken, err = j.generateToken(userID, email, "refresh", 180*24*time.Hour)
 	if err != nil {
 		return "", "", err
 	}

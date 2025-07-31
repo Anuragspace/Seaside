@@ -8,7 +8,7 @@ const SESSION_TABS_KEY = 'auth_session_tabs';
 // Session configuration
 const DEFAULT_SESSION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
 const ACTIVITY_CHECK_INTERVAL = 60 * 1000; // 1 minute
-const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+const INACTIVITY_TIMEOUT = 60 * 60 * 1000; // 60 minutes (increased from 30 minutes)
 const SESSION_CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 // Session event types
