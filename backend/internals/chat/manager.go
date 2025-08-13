@@ -3,11 +3,23 @@ package chat
 import (
 	"encoding/json"
 	"log"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/gofiber/websocket/v2"
 )
+
+// isAlphanumeric checks if a string contains only alphanumeric characters
+func isAlphanumeric(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLetter(r) && !unicode.IsNumber(r) {
+			return false
+		}
+	}
+	return true
+}
 
 // ChatMessage represents a chat message with all necessary fields
 type ChatMessage struct {
@@ -44,6 +56,16 @@ func (cm *ChatManager) AddParticipant(roomID, userID, username string, conn *web
 	cm.mutex.Lock()         // Lock for writing
 	defer cm.mutex.Unlock() // Always unlock when function exits
 
+	// Extract base username (remove random suffix if present)
+	displayName := username
+	if idx := strings.LastIndex(username, "_"); idx != -1 {
+		// Check if the suffix looks like a random string (alphanumeric, 6 chars)
+		suffix := username[idx+1:]
+		if len(suffix) == 6 && isAlphanumeric(suffix) {
+			displayName = username[:idx]
+		}
+	}
+
 	// Create new participant
 	participant := &ChatParticipant{
 		ID:       userID,
@@ -58,14 +80,14 @@ func (cm *ChatManager) AddParticipant(roomID, userID, username string, conn *web
 	// Send join notification to all participants in the room
 	joinMsg := ChatMessage{
 		Type:      "join",
-		Text:      username + " joined the chat",
+		Text:      displayName + " joined the chat",
 		From:      "system",
 		Timestamp: time.Now(),
 		RoomID:    roomID,
 	}
 	cm.broadcastToRoom(roomID, joinMsg, nil) // nil = don't exclude anyone
 
-	log.Printf("[Chat] %s joined room %s", username, roomID)
+	log.Printf("[Chat] %s joined room %s", displayName, roomID)
 }
 
 // RemoveParticipant removes a user from a chat room
@@ -99,15 +121,25 @@ func (cm *ChatManager) RemoveParticipant(roomID, userID string) {
 
 	// Send leave notification
 	if username != "" {
+		// Extract base username (remove random suffix if present)
+		displayName := username
+		if idx := strings.LastIndex(username, "_"); idx != -1 {
+			// Check if the suffix looks like a random string (alphanumeric, 6 chars)
+			suffix := username[idx+1:]
+			if len(suffix) == 6 && isAlphanumeric(suffix) {
+				displayName = username[:idx]
+			}
+		}
+
 		leaveMsg := ChatMessage{
 			Type:      "leave",
-			Text:      username + " left the chat",
+			Text:      displayName + " left the chat",
 			From:      "system",
 			Timestamp: time.Now(),
 			RoomID:    roomID,
 		}
 		cm.broadcastToRoom(roomID, leaveMsg, nil)
-		log.Printf("[Chat] %s left room %s", username, roomID)
+		log.Printf("[Chat] %s left room %s", displayName, roomID)
 	}
 }
 
@@ -158,10 +190,18 @@ func (cm *ChatManager) GetRoomParticipants(roomID string) []string {
 		return []string{} // Empty room
 	}
 
-	// Extract usernames
-	usernames := make([]string, len(participants))
-	for i, p := range participants {
-		usernames[i] = p.Username
+	// Extract display names (remove random suffixes)
+	usernames := make([]string, 0, len(participants))
+	for _, p := range participants {
+		displayName := p.Username
+		if idx := strings.LastIndex(p.Username, "_"); idx != -1 {
+			// Check if the suffix looks like a random string (alphanumeric, 6 chars)
+			suffix := p.Username[idx+1:]
+			if len(suffix) == 6 && isAlphanumeric(suffix) {
+				displayName = p.Username[:idx]
+			}
+		}
+		usernames = append(usernames, displayName)
 	}
 
 	return usernames

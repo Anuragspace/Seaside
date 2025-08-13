@@ -29,7 +29,7 @@ export function useWebRTC(
     const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const initialSetupRef = useRef(false);
-    
+
     const [dataChannelOpen, setDataChannelOpen] = useState(false);
     const [connectionState, setConnectionState] = useState<RTCPeerConnectionState>('new');
     const [iceConnectionState, setIceConnectionState] = useState<RTCIceConnectionState>('new');
@@ -61,7 +61,7 @@ export function useWebRTC(
 
     // Buffer messages until WS is open
     const wsSendBuffer = useRef<any[]>([]);
-    
+
     const safeWSSend = useCallback((data: any) => {
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify(data));
@@ -128,23 +128,23 @@ export function useWebRTC(
             console.log("[Media] Attempting to get user media with optimized constraints");
             const constraints = getInitialConstraints();
             console.log("[Media] Using constraints:", constraints);
-            
+
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             console.log("[Media] Successfully acquired media stream");
             return stream;
         } catch (error) {
             console.warn("[Media] Primary constraints failed, trying fallback:", error);
-            
+
             try {
                 const fallbackConstraints = getFallbackConstraints();
                 console.log("[Media] Using fallback constraints:", fallbackConstraints);
-                
+
                 const stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
                 console.log("[Media] Successfully acquired media stream with fallback");
                 return stream;
             } catch (fallbackError) {
                 console.error("[Media] Fallback also failed:", fallbackError);
-                
+
                 // Last resort: try basic constraints
                 try {
                     console.log("[Media] Trying basic constraints as last resort");
@@ -165,7 +165,7 @@ export function useWebRTC(
     // Enhanced data channel setup with proper error handling
     const setupDataChannel = useCallback((dc: RTCDataChannel) => {
         console.log("[DataChannel] Setting up data channel:", dc.label);
-        
+
         dc.onopen = () => {
             console.log("[DataChannel] Opened successfully");
             setDataChannelOpen(true);
@@ -180,7 +180,7 @@ export function useWebRTC(
             console.error("[DataChannel] Error:", error);
             setDataChannelOpen(false);
         };
-        
+
         dc.onmessage = (event) => {
             console.log("[DataChannel] Message received:", event.data);
             if (typeof event.data === "string" && onMessageRef.current) {
@@ -221,7 +221,7 @@ export function useWebRTC(
         }
 
         console.log("[WebRTC] Creating new peer connection");
-        
+
         // Mobile-optimized peer connection configuration
         const pcConfig = {
             iceServers,
@@ -283,9 +283,10 @@ export function useWebRTC(
         // Enhanced negotiation handling with mobile considerations
         pc.onnegotiationneeded = async () => {
             try {
-                console.log("[WebRTC] Negotiation needed");
+                console.log("[WebRTC] Negotiation needed - signaling state:", pc.signalingState);
+                console.log("[WebRTC] Local tracks:", localStreamRef.current?.getTracks().length || 0);
                 makingOfferRef.current = true;
-                
+
                 if (pc.signalingState === "stable") {
                     const offerOptions = {
                         offerToReceiveAudio: true,
@@ -294,11 +295,13 @@ export function useWebRTC(
                             voiceActivityDetection: false
                         })
                     };
-                    
+
                     const offer = await pc.createOffer(offerOptions);
                     await pc.setLocalDescription(offer);
-                    console.log("[WebRTC] Sending offer");
+                    console.log("[WebRTC] Created and set local offer, sending to peer");
                     safeWSSend({ offer });
+                } else {
+                    console.log("[WebRTC] Skipping offer creation - signaling state not stable:", pc.signalingState);
                 }
             } catch (error) {
                 console.error("[WebRTC] Negotiation error:", error);
@@ -324,7 +327,7 @@ export function useWebRTC(
             });
             if (remoteVideoRef.current) {
                 remoteVideoRef.current.srcObject = remoteStream;
-                
+
                 // Mobile-specific: Ensure video plays
                 if (isMobile) {
                     remoteVideoRef.current.play().catch(e => {
@@ -354,7 +357,7 @@ export function useWebRTC(
             console.log("[WebSocket] Connected");
             setIsReconnecting(false);
             ws.send(JSON.stringify({ join: true, userName }));
-            
+
             // Send buffered messages
             while (wsSendBuffer.current.length > 0) {
                 ws.send(JSON.stringify(wsSendBuffer.current.shift()));
@@ -376,7 +379,7 @@ export function useWebRTC(
         ws.onclose = (event) => {
             console.log("[WebSocket] Disconnected:", event.code, event.reason);
             stopHeartbeat();
-            
+
             // Attempt reconnection if not intentional
             if (event.code !== 1000 && !isReconnecting) {
                 scheduleReconnection();
@@ -406,7 +409,7 @@ export function useWebRTC(
                 console.log("[WebRTC] Received offer");
                 const offerCollision = makingOfferRef.current || pc.signalingState !== "stable";
                 ignoreOfferRef.current = !isPolite && offerCollision;
-                
+
                 if (ignoreOfferRef.current) {
                     console.log("[WebRTC] Ignoring offer due to collision (impolite peer)");
                     return;
@@ -419,7 +422,7 @@ export function useWebRTC(
 
                 await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
                 console.log("[WebRTC] Remote description set");
-                
+
                 // Process queued ICE candidates
                 while (iceQueueRef.current.length > 0) {
                     const candidate = iceQueueRef.current.shift();
@@ -432,7 +435,7 @@ export function useWebRTC(
                     const answerOptions = isMobile ? {
                         voiceActivityDetection: false
                     } : {};
-                    
+
                     const answer = await pc.createAnswer(answerOptions);
                     await pc.setLocalDescription(answer);
                     console.log("[WebRTC] Sending answer");
@@ -452,10 +455,18 @@ export function useWebRTC(
                     console.log("[WebRTC] Queueing ICE candidate");
                     iceQueueRef.current.push(message.iceCandidate);
                 }
-            } else if (message.join && isPolite) {
-                console.log("[WebRTC] Join message received, initiating call");
-                // Only polite (guest) peer initiates
-                await callUser();
+            } else if (message.join) {
+                console.log("[WebRTC] Join message received, both peers should be ready");
+                // Both peers should ensure they have tracks and are ready
+                await addTracksIfNeeded(pc);
+
+                // Only the polite (guest) peer initiates the offer
+                if (isPolite) {
+                    console.log("[WebRTC] Polite peer initiating call");
+                    await callUser();
+                } else {
+                    console.log("[WebRTC] Impolite peer ready for negotiation");
+                }
             } else if (message.leave) {
                 console.log("[WebRTC] Peer left");
                 handlePeerDisconnection();
@@ -486,11 +497,11 @@ export function useWebRTC(
     // Reconnection logic with exponential backoff
     const scheduleReconnection = useCallback(() => {
         if (isReconnecting) return;
-        
+
         setIsReconnecting(true);
         const baseDelay = isMobile ? 2000 : 1000;
         const delay = Math.min(baseDelay * Math.pow(2, Math.random()), 10000);
-        
+
         reconnectTimeoutRef.current = setTimeout(() => {
             console.log("[WebSocket] Attempting reconnection...");
             connectWebSocket();
@@ -612,13 +623,13 @@ export function useWebRTC(
         async function start() {
             try {
                 console.log("[Setup] Starting WebRTC setup for", isMobile ? "mobile" : "desktop");
-                
+
                 // Get local media with mobile-optimized constraints and fallbacks
                 localStream = await getUserMediaWithFallback();
 
                 if (localVideoRef.current) {
                     localVideoRef.current.srcObject = localStream;
-                    
+
                     // Mobile-specific: Ensure local video plays
                     if (isMobile) {
                         localVideoRef.current.muted = true; // Ensure muted for autoplay
@@ -632,10 +643,10 @@ export function useWebRTC(
 
                 // Create peer connection first
                 const peer = createPeer();
-                
+
                 // Add tracks to peer connection
                 await addTracksIfNeeded(peer);
-                
+
                 // Connect WebSocket after peer is ready (with delay for mobile)
                 if (isMobile) {
                     setTimeout(() => connectWebSocket(), 500);
@@ -647,7 +658,7 @@ export function useWebRTC(
 
             } catch (error) {
                 console.error("[Setup] Error:", error);
-                
+
                 // More specific error messages for mobile
                 let errorMessage = 'Unable to access camera/microphone. ';
                 if (isMobile) {
@@ -659,7 +670,7 @@ export function useWebRTC(
                 } else {
                     errorMessage += 'Please check permissions and try again.';
                 }
-                
+
                 alert(errorMessage);
             }
         }
@@ -668,11 +679,11 @@ export function useWebRTC(
 
         return () => {
             console.log("[Cleanup] Cleaning up WebRTC resources");
-            
+
             // Cleanup
             stopHeartbeat();
             stopStatsMonitoring();
-            
+
             if (reconnectTimeoutRef.current) {
                 clearTimeout(reconnectTimeoutRef.current);
             }
@@ -692,7 +703,7 @@ export function useWebRTC(
             ignoreOfferRef.current = false;
             wsSendBuffer.current = [];
             initialSetupRef.current = false;
-            
+
             // Reset state
             setDataChannelOpen(false);
             setConnectionState('new');
@@ -734,7 +745,7 @@ export function useWebRTC(
         const dc = dataChannelRef.current;
         console.log("[DataChannel] Attempting to send message:", msg);
         console.log("[DataChannel] Channel state:", dc?.readyState);
-        
+
         if (dc && dc.readyState === "open") {
             try {
                 dc.send(msg);

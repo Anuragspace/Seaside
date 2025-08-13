@@ -29,8 +29,9 @@ export function useChat(roomId: string, userName: string) {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
   
-  // Generate a unique username to prevent conflicts
+  // Generate a unique username to prevent conflicts, but keep original for display
   const uniqueUserName = useRef<string>(`${userName}_${Math.random().toString(36).substr(2, 6)}`);
+  const displayUserName = useRef<string>(userName);
 
   const connectChat = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -43,6 +44,7 @@ export function useChat(roomId: string, userName: string) {
     const wsUrl = `${wsBase}/chat?roomID=${roomId}&username=${encodeURIComponent(uniqueUserName.current)}`;
     console.log("[Chat] Connecting to WebSocket:", wsUrl);
     console.log("[Chat] Using unique username:", uniqueUserName.current);
+    console.log("[Chat] Display username:", displayUserName.current);
     
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -116,17 +118,20 @@ export function useChat(roomId: string, userName: string) {
       }
     }
 
+    // Handle join/leave messages - these are system messages, not from the current user
+    const isFromMe = data.type === 'chat' && data.from === uniqueUserName.current;
+    
     const message: ChatMessage = {
       id: messageId,
       text: data.text || "",
       from: data.from || "system",
-      fromMe: data.from === uniqueUserName.current,
+      fromMe: isFromMe,
       timestamp: new Date(data.timestamp || Date.now()),
       type: data.type || "chat",
     };
 
     console.log("[Chat] Adding message to state:", message);
-    console.log("[Chat] Current userName:", userName, "Unique userName:", uniqueUserName.current, "Message from:", data.from, "fromMe:", data.from === uniqueUserName.current);
+    console.log("[Chat] Current userName:", userName, "Unique userName:", uniqueUserName.current, "Message from:", data.from, "fromMe:", isFromMe);
     setMessages(prev => [...prev, message]);
     setChatStats(prev => ({ ...prev, totalMessages: prev.totalMessages + 1 }));
 

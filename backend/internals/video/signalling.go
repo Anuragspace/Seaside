@@ -21,6 +21,7 @@ type BroadcastMessage struct {
 	Client  *websocket.Conn
 }
 
+// This is unused in current code but kept for compatibility
 type Client struct {
 	Conn  *websocket.Conn
 	Mutex sync.Mutex
@@ -34,6 +35,8 @@ var (
 func broadcaster() {
 	for msg := range broadcast {
 		clients := AllRooms.Get(msg.RoomID)
+		log.Printf("Broadcasting to %d clients in room %s", len(clients), msg.RoomID)
+		
 		for i := 0; i < len(clients); i++ {
 			client := &clients[i]
 			// Don't send message back to sender
@@ -55,13 +58,6 @@ func broadcaster() {
 }
 
 func CreateRoomRequestHandler(c *fiber.Ctx) error {
-	c.Set("Access-Control-Allow-Origin", "*")
-
-	// Prevent duplicate room creation by checking if request is a fetch preflight (OPTIONS)
-	if c.Method() == fiber.MethodOptions {
-		return c.SendStatus(fiber.StatusNoContent)
-	}
-
 	roomID := AllRooms.CreateRoom()
 	log.Printf("Room created: %s", roomID)
 	return c.JSON(response{RoomID: roomID})
@@ -79,11 +75,6 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 
 	// Check if room exists, if not create it
 	participants := AllRooms.Get(roomID)
-	if participants == nil {
-		log.Printf("Room %s does not exist, creating it", roomID)
-		// Room doesn't exist, but we'll create it implicitly
-		AllRooms.Map[roomID] = []Participant{}
-	}
 
 	// Add new participant to the room
 	AllRooms.InsertInRoom(roomID, false, c)
@@ -91,14 +82,31 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 	// Get updated participants list
 	participants = AllRooms.Get(roomID)
 
-	// Notify the new participant if there are already others
+	// Notify ALL participants when someone joins
 	if len(participants) > 1 {
-		log.Printf("Notifying new participant in room %s that others are present", roomID)
+		log.Printf("Notifying all participants in room %s that someone joined", roomID)
+		
+		// Notify the new participant
 		err := c.WriteJSON(map[string]interface{}{
 			"join": true,
 		})
 		if err != nil {
 			log.Printf("Error notifying new participant: %v", err)
+		}
+		
+		// Notify existing participants
+		joinMsg := BroadcastMessage{
+			Message: map[string]interface{}{
+				"join": true,
+			},
+			RoomID: roomID,
+			Client: c, // Exclude the new joiner from broadcast
+		}
+		
+		select {
+		case broadcast <- joinMsg:
+		case <-time.After(5 * time.Second):
+			log.Printf("Failed to broadcast join message for room %s", roomID)
 		}
 	}
 
@@ -172,15 +180,12 @@ func WebSocketJoinHandler(c *websocket.Conn) {
 		msg.RoomID = roomID
 
 		// Log the message type for debugging
-		if offer, hasOffer := msg.Message["offer"]; hasOffer {
+		if _, hasOffer := msg.Message["offer"]; hasOffer {
 			log.Printf("Broadcasting offer in room %s", roomID)
-			_ = offer // Avoid unused variable warning
-		} else if answer, hasAnswer := msg.Message["answer"]; hasAnswer {
+		} else if _, hasAnswer := msg.Message["answer"]; hasAnswer {
 			log.Printf("Broadcasting answer in room %s", roomID)
-			_ = answer // Avoid unused variable warning
-		} else if candidate, hasCandidate := msg.Message["iceCandidate"]; hasCandidate {
+		} else if _, hasCandidate := msg.Message["iceCandidate"]; hasCandidate {
 			log.Printf("Broadcasting ICE candidate in room %s", roomID)
-			_ = candidate // Avoid unused variable warning
 		}
 
 		// Broadcast message with timeout to prevent blocking
