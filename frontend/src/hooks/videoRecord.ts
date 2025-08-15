@@ -203,3 +203,7 @@ export function cleanupVideoRecording() {
     chunks = [];
     isRecording = false;
 }
+
+// the first step is that i will record the chunks in every 
+// 5 seconds and it will automatically download with the end
+//  of the filemame with the naming convenction

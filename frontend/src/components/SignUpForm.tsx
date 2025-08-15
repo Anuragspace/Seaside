@@ -1,6 +1,7 @@
 "use client"
 
 import React from "react";
+import ReactGA from "react-ga";
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { signUpSchema } from "../../schema/signUpSchema";
@@ -121,6 +122,7 @@ export default function SignUpForm() {
         {/* OAuth2 Provider Buttons */}
         <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
           <Button
+            
             type="button"
             variant="bordered"
             className="w-full"
@@ -295,6 +297,13 @@ export default function SignUpForm() {
           </div>
 
           <Button
+            onClick={() => {
+              ReactGA.event({
+                category: 'Button',
+                action: 'Click',
+                label: 'Submit button'
+              });
+            }}
             type="submit"
             color="primary"
             className="w-full"
