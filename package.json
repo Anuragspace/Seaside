@@ -19,6 +19,7 @@
     "@heroui/popover": "^2.3.23",
     "@heroui/react": "^2.8.1",
     "@heroui/table": "^2.2.23",
-    "framer-motion": "^12.23.6"
+    "framer-motion": "^12.23.6",
+    "react-gtag": "^0.0.0"
   }
 }

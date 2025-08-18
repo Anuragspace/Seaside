@@ -6,13 +6,13 @@ import SignUpForm from './components/SignUpForm';
 import SignInForm from './components/SignInForm';
 import { ProtectedRoute, PublicOnlyRoute } from './components/ProtectedRoute';
 import { useAuth } from './contexts/AuthContext';
-import ReactGA from 'react-ga';  
+import ReactGA from 'react-ga4';  
 import { getAuthRedirect } from './utils/routeUtils';
 function App() {
   const { isAuthenticated, isLoading, authError } = useAuth();
   const location = useLocation();
 
-  const Tracker = import.meta.env.VITE_GA_TRACKING_ID;
+  const Tracker = "G-E25J2PGT2W";
 
   useEffect(() => {
     if(Tracker) {
@@ -23,7 +23,7 @@ function App() {
   // tracking the page views
   useEffect(() => {
     if(Tracker){
-      ReactGA.pageview(location.pathname + location.search);
+      ReactGA.send({hitType: "pageview", page: location.pathname + location.search});
     }
   }, [location, Tracker])
 
