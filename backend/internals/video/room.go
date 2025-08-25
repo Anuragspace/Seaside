@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"seaside/lib/monitoring"
+
 	"github.com/gofiber/websocket/v2"
 	"github.com/google/uuid"
 )
@@ -59,6 +61,10 @@ func (r *RoomMap) CreateRoom() string {
 	}
 
 	r.Map[roomID] = []Participant{}
+	
+	// Update metrics
+	monitoring.GlobalMetrics.IncrementRooms()
+	
 	return roomID
 }
 
@@ -78,6 +84,9 @@ func (r *RoomMap) InsertInRoom(roomID string, host bool, conn *websocket.Conn) {
 	}
 
 	r.Map[roomID] = append(r.Map[roomID], newParticipant)
+	
+	// Update metrics
+	monitoring.GlobalMetrics.IncrementConnections()
 }
 
 // Remove a client from a room safely
@@ -94,6 +103,9 @@ func (r *RoomMap) RemoveClient(roomID string, conn *websocket.Conn) {
 		if participant.Conn == conn {
 			// Remove participant from slice
 			r.Map[roomID] = append(participants[:i], participants[i+1:]...)
+			
+			// Update metrics
+			monitoring.GlobalMetrics.DecrementConnections()
 			break
 		}
 	}
@@ -101,6 +113,7 @@ func (r *RoomMap) RemoveClient(roomID string, conn *websocket.Conn) {
 	// If room empty after removal, delete the room
 	if len(r.Map[roomID]) == 0 {
 		delete(r.Map, roomID)
+		monitoring.GlobalMetrics.DecrementRooms()
 	}
 }
 

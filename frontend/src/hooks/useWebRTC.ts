@@ -262,7 +262,7 @@ export function useWebRTC(
             }
         };
 
-        // Data channel setup - CRITICAL FIX
+        // Data channel setup 
         if (isHost) {
             console.log("[WebRTC] Host creating data channel");
             // Create data channel AFTER peer connection is created but BEFORE adding tracks

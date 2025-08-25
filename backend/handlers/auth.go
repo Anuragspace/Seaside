@@ -12,7 +12,7 @@ import (
 )
 
 type AuthHandlers struct {
-	userRepo       db.UserRepositoryInterface
+	userRepo       db.UserRepositoryInterface  // abstracts database operations
 	jwtUtil        *auth.JWTUtil
 	passwordUtil   *auth.PasswordUtil
 	validationUtil *auth.ValidationUtil
@@ -191,7 +191,7 @@ func (h *AuthHandlers) LoginHandler(c *fiber.Ctx) error {
 		},
 		"accessToken":  accessToken,
 		"refreshToken": refreshToken,
-		"expiresIn":    3600, // 1 hour in seconds
+		"expiresIn":    3600, 
 	})
 }
 

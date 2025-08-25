@@ -14,6 +14,7 @@ import (
 	"seaside/lib/auth"
 	"seaside/lib/config"
 	"seaside/lib/db"
+	"seaside/lib/monitoring"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/etag"
@@ -119,8 +120,17 @@ func setupRoutes(app *fiber.App, authHandlers *handlers.AuthHandlers, jwtUtil *a
 
 	// Stats endpoint for monitoring
 	app.Get("/stats", func(c *fiber.Ctx) error {
-		stats := video.AllRooms.GetRoomStats()
-		return c.JSON(stats)
+		roomStats := video.AllRooms.GetRoomStats()
+		systemMetrics := monitoring.GlobalMetrics.GetSnapshot()
+		
+		// Combine all metrics
+		combinedStats := fiber.Map{
+			"rooms": roomStats,
+			"system": systemMetrics,
+			"timestamp": time.Now().Unix(),
+		}
+		
+		return c.JSON(combinedStats)
 	})
 
 	// Rate limiting for room creation
